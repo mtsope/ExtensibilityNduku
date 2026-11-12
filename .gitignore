@@ -1,0 +1,66 @@
+
+# ==========================================
+# VISUAL STUDIO - CACHE E CONFIGURACOES
+# ==========================================
+.vs/
+**/.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# ==========================================
+# C# / .NET - COMPILACAO
+# ==========================================
+bin/
+obj/
+**/bin/
+**/obj/
+Debug/
+Release/
+x64/
+x86/
+
+# ==========================================
+# PACOTES E DEPENDENCIAS
+# ==========================================
+packages/
+**/packages/
+
+# ==========================================
+# FICHEIROS TEMPORARIOS
+# ==========================================
+*.tmp
+*.temp
+*.log
+*.cache
+*.bak
+*.old
+
+# ==========================================
+# VISUAL STUDIO EXTENSIONS
+# ==========================================
+_ReSharper*/
+*.DotSettings.user
+
+# ==========================================
+# SISTEMA OPERATIVO
+# ==========================================
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ==========================================
+# TESTES E COBERTURA
+# ==========================================
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# ==========================================
+# CONFIGURACOES LOCAIS E SEGREDOS
+# ==========================================
+appsettings.Development.json
+secrets.json

@@ -105,7 +105,6 @@
             this.grbListagm.TabIndex = 1;
             this.grbListagm.TabStop = false;
             this.grbListagm.Text = "Listagem";
-            this.grbListagm.Enter += new System.EventHandler(this.grbListagm_Enter_1);
             // 
             // dataGridView1
             // 

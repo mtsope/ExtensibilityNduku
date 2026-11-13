@@ -223,16 +223,14 @@
     </Compile>
     <Compile Include="Model\TDU_MovitelDesempenho.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Service\TDU_MovitelDesempenhoService.cs" />
+    <Compile Include="Controller\TDU_MovitelDesempenhoController.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Form\PriCustomFormDemo.resx">
       <DependentUpon>PriCustomFormDemo.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Controller\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />

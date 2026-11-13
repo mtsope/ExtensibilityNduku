@@ -1,6 +1,10 @@
 ﻿using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Bibliography;
+using ExtensibilityNduku.Model;
+using ExtensibilityNduku.Service;
 using Primavera.Extensibility.BusinessEntities;
 using Primavera.Extensibility.CustomForm;
+using StdBE100;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -10,9 +14,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml;
-using ExtensibilityNduku.Model;
-using ExtensibilityNduku.Service;
-using StdBE100;
 
 namespace ExtensibilityNduku.Form
 {
@@ -234,158 +235,218 @@ namespace ExtensibilityNduku.Form
             cboFolha.Items.Add("Digital");
         }
 
-        private void grbListagm_Enter(object sender, EventArgs e)
-        {
-
-        }
 
         private void btnGravar_Click(object sender, EventArgs e)
         {
-
-            var mapeamentos = new[]
-            {
-                new { IndiceColuna = 3,Nome = "CDU_Agente" },
-                new { IndiceColuna = 4, Nome = "CDU_ID" },
-                new { IndiceColuna = 5, Nome = "CDU_Line" },
-                new { IndiceColuna = 6, Nome = "CDU_LOffS1" },
-                new { IndiceColuna = 7, Nome = "CDU_RGMissInfoBCCS" },
-                new { IndiceColuna = 8, Nome = "CDU_RGAdvertencia" },
-                new { IndiceColuna = 9, Nome = "CDU_RCNumeroChamadas" },
-                new { IndiceColuna = 10, Nome = "CDU_Test1" }
-            };
-            var colunasDisponiveis = mapeamentos
-                //.Where(mapeamento => mapeamento.IndiceColuna + 1 < dataGridView1.Columns.Count)
-                .ToList();
-
-            if (colunasDisponiveis.Count == 0)
-            {
-                MessageBox.Show(
-                    "A grelha não contém nenhuma coluna mapeada para gravação.",
-                    "Dados inválidos",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
-            }
-
-            var desempenhos = new List<TDU_MovitelDesempenho>();
+            /*
+            PSO.Dialogos.MostraAviso(""+dtoDataUpload.Value);
             try
             {
-                string[] ficheirosConfiguracao =
-                {
-                    AppDomain.CurrentDomain.SetupInformation.ConfigurationFile,
-                    typeof(PriCustomFormDemo).Assembly.Location + ".config"
-                };
-                string connectionString = null;
-                foreach (string ficheiroConfiguracao in ficheirosConfiguracao.Distinct(StringComparer.OrdinalIgnoreCase))
-                {
-                    if (string.IsNullOrWhiteSpace(ficheiroConfiguracao) || !System.IO.File.Exists(ficheiroConfiguracao))
-                        continue;
+                
 
-                    var documentoConfiguracao = new XmlDocument();
-                    documentoConfiguracao.Load(ficheiroConfiguracao);
-                    XmlNode noConnectionString = documentoConfiguracao.SelectSingleNode(
-                        "/configuration/connectionStrings/add[@name='MovitelDesempenho']");
-                    XmlAttribute atributoConnectionString = noConnectionString == null
-                        ? null
-                        : noConnectionString.Attributes["connectionString"];
-                    if (atributoConnectionString != null && !string.IsNullOrWhiteSpace(atributoConnectionString.Value))
+                PSO.Dialogos.MostraAviso("Tryyyy");
+
+                StdBELista lista = BSO.Consulta("Select * from TDU_MovitelDesempenho  where CDU_Data = @CDU_Data");
+                PSO.MensagensDialogos.MostraTDU(lista+"");
+                
+
+                bool existeRegistos = !lista.Vazia();
+                if (existeRegistos)
+                {
+
+                    existeRegistos = PSO.Dialogos.MostraPerguntaSimples("Já existem registos para a data selecionada. Deseja substituir os registos existentes?");
+                    //BSO.DSO.ExecuteSQL("Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) values (@CDU_Agente, @CDU_ID, @CDU_Line, @CDU_Data)");
+                    if (existeRegistos)
                     {
-                        connectionString = atributoConnectionString.Value;
-                        break;
+                        existeRegistos = false;
+                        BSO.DSO.ExecuteSQL("Delete from TDU_MovitelDesempenho where CDU_Data = @CDU_Data");
+                    }
+                    existeRegistos = true;
+
+                }
+
+
+                if (existeRegistos == false && cboFolha.Text == "Monthly Report")
+                {
+                    BSO.DSO.ExecuteSQL("Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) values (@CDU_Agente, @CDU_ID, @CDU_Line, @CDU_Data)");
+                    for (int i = 0; i < dataGridView1.Rows.Count; i++)
+                    {
+                        //BSO.DSO.Parametros.Edita("CDU_Agente", dataGridView1.Rows[i].Cells[1].Value.ToString());
+                        //BSO.DSO.Parametros.Edita("CDU_ID", dataGridView1.Rows[i].Cells[2].Value.ToString());
+                        //BSO.DSO.Parametros.Edita("CDU_Line", dataGridView1.Rows[i].Cells[3].Value.ToString());
+                        //BSO.DSO.Parametros  ("CDU_Data", grbData.Text);
+                        BSO.DSO.ExecuteSQL($"Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
+                            $"values ('{dataGridView1.Rows[i].Cells[1].Value.ToString()}', '{dataGridView1.Rows[i].Cells[2].Value.ToString()}','{dataGridView1.Rows[i].Cells[3].Value.ToString()}',  {grbData.Text})");
                     }
                 }
-
-                if (string.IsNullOrWhiteSpace(connectionString))
-                    throw new InvalidOperationException(
-                        "Não foi encontrada uma connection string 'MovitelDesempenho' preenchida no ficheiro de configuração do ERP nem no ficheiro ExtensibilityNduku.dll.config.");
-
-                foreach (DataGridViewRow linha in dataGridView1.Rows)
-                {
-                    if (linha.IsNewRow)
-                        continue;
-
-                    var desempenho = new TDU_MovitelDesempenho();
-                    foreach (var mapeamento in colunasDisponiveis)
-                    {
-                        int indiceCelula = mapeamento.IndiceColuna + 1;
-                        object valor = linha.Cells[indiceCelula].Value;
-                        string valorTexto = valor == null || valor == DBNull.Value
-                            ? string.Empty
-                            : Convert.ToString(valor, CultureInfo.CurrentCulture).Trim();
-
-                        switch (mapeamento.Nome)
-                        {
-                            case "CDU_Agente":
-                                desempenho.CDU_Agente = valorTexto;
-                                break;
-                            case "CDU_ID":
-                                desempenho.CDU_ID = valorTexto;
-                                break;
-                            case "CDU_Line":
-                                desempenho.CDU_Line = valorTexto;
-                                break;
-                            default:
-                                double valorNumerico;
-                                if (!double.TryParse(valorTexto,
-                                    NumberStyles.Float | NumberStyles.AllowThousands,
-                                    CultureInfo.CurrentCulture, out valorNumerico))
-                                {
-                                    string linhaExcel = Convert.ToString(linha.Cells[0].Value);
-                                    throw new FormatException(
-                                        "Valor inválido na linha " + linhaExcel +
-                                        ", coluna '" + dataGridView1.Columns[indiceCelula].HeaderText +
-                                        "'. Esperado um número.");
-                                }
-
-                                switch (mapeamento.Nome)
-                                {
-                                    case "CDU_LOffS1": desempenho.CDU_LOffS1 = valorNumerico; break;
-                                    case "CDU_RGMissInfoBCCS": desempenho.CDU_RGMissInfoBCCS = valorNumerico; break;
-                                    case "CDU_RGAdvertencia": desempenho.CDU_RGAdvertencia = valorNumerico; break;
-                                    case "CDU_RCNumeroChamadas": desempenho.CDU_RCNumeroChamadas = valorNumerico; break;
-                                    case "CDU_Test1": desempenho.CDU_Test1 = valorNumerico; break;
-                                }
-                                break;
-                        }
-                    }
-
-                    desempenhos.Add(desempenho);
-                }
-
-                if (desempenhos.Count == 0)
-                {
-                    MessageBox.Show(
-                        "Não existem linhas para gravar.",
-                        "Aviso",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
-                    return;
-                }
-
-                var service = new TDU_MovitelDesempenhoService();
-                int gravados = service.Gravar(
-                    desempenhos,
-                    colunasDisponiveis.Select(mapeamento => mapeamento.Nome),
-                    connectionString);
-                MessageBox.Show(
-                    gravados + " registo(s) gravado(s) com sucesso.",
-                    "Gravação concluída",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    "Não foi possível gravar os dados:\n" + ex.Message,
-                    "Erro",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                PSO.MensagensDialogos.MostraErro("Erro ao registar os dados");
             }
         }
 
-        private void grbListagm_Enter_1(object sender, EventArgs e)
-        {
+            *
+            */
 
+            bool transacaoIniciada = false;
+
+            try
+            {
+                // 1. Validar a folha selecionada
+                if (cboFolha.Text != "Monthly Report")
+                {
+                    PSO.Dialogos.MostraAviso(
+                        "Selecione a folha Monthly Report."
+                    );
+                    return;
+                }
+
+                // 2. Validar o DataGridView
+                if (dataGridView1.Rows.Count == 0)
+                {
+                    PSO.Dialogos.MostraAviso(
+                        "Não existem dados para gravar."
+                    );
+                    return;
+                }
+
+                // 3. Obter a data selecionada
+                DateTime dataSelecionada =
+                    Convert.ToDateTime(dtoDataUpload.Value);
+
+                string dataSQL =
+                    dataSelecionada.ToString("yyyyMMdd");
+
+                // 4. Verificar se já existem registos para a data
+                string sqlConsulta =
+                    "SELECT * FROM TDU_MovitelDesempenho " +
+                    "WHERE CONVERT(date, CDU_Data) = " +
+                    "CONVERT(date, '" + dataSQL + "', 112)";
+
+                StdBELista lista = BSO.Consulta(sqlConsulta);
+
+                bool existeRegistos = !lista.Vazia();
+
+               
+                if (existeRegistos)
+                {
+                    bool substituir =
+                        PSO.Dialogos.MostraPerguntaSimples(
+                            "Já existem registos para a data selecionada. " +
+                            "Deseja substituir os registos existentes?"
+                        );
+
+                    if (!substituir)
+                        return;
+                }
+
+                // 6. Iniciar transação
+                BSO.IniciaTransaccao();
+                transacaoIniciada = true;
+
+                // 7. Eliminar registos anteriores, caso existam
+                if (existeRegistos)
+                {
+                    string sqlDelete =
+                        "DELETE FROM TDU_MovitelDesempenho " +
+                        "WHERE CONVERT(date, CDU_Data) = " +
+                        "CONVERT(date, '" + dataSQL + "', 112)";
+
+                    BSO.DSO.ExecuteSQL(sqlDelete);
+                }
+
+                // 8. Percorrer o DataGridView e gravar os dados
+                int totalGravados = 0;
+                var isDuplicated = new HashSet<string>();
+
+                for (int i = 0; i < dataGridView1.Rows.Count; i++)
+                {
+                    DataGridViewRow linha = dataGridView1.Rows[i];
+
+                    if (linha.IsNewRow)
+                        continue;
+
+                    // Obter valores do Excel
+                    string agente = Convert.ToString(
+                        linha.Cells[2].Value ?? "").Trim();
+
+                    string id = Convert.ToString(
+                        linha.Cells[3].Value ?? "").Trim();
+
+                    string linhaMovitel = Convert.ToString(
+                        linha.Cells[5].Value ?? "").Trim();
+
+                    // Validar campos obrigatórios
+                    if (string.IsNullOrWhiteSpace(agente) ||
+                        string.IsNullOrWhiteSpace(id))
+                    {
+                        PSO.Dialogos.MostraAviso(
+                             "Existem campos obrigatórios vazios na linha " +
+                            (i + 1)
+                        );
+                    } else 
+                        if (!isDuplicated.Add(id) || !isDuplicated.Add(agente))
+                        {
+                            PSO.Dialogos.MostraAviso(
+                                "Valor duplicado encontrado no Excel: " +
+                                id + " - " + agente +
+                                ". Verifique a linha " + (i + 1) + "."
+                            );
+                            return;
+                        }
+
+                    // Escapar apóstrofos para SQL
+                    agente = agente.Replace("'", "''");
+                    id = id.Replace("'", "''");
+                    linhaMovitel = linhaMovitel.Replace("'", "''");
+
+                    // Inserir na tabela CDU
+                    string sqlInsert =
+                        "INSERT INTO TDU_MovitelDesempenho " +
+                        "(CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
+                        "VALUES (" +
+                        "'" + agente + "', " +
+                        "'" + id + "', " +
+                        "'" + linhaMovitel + "', " +
+                        "CONVERT(date, '" + dataSQL + "', 112)" +
+                        ")";
+
+                    BSO.DSO.ExecuteSQL(sqlInsert);
+
+                    totalGravados++;
+                }
+
+                // 9. Confirmar transação
+                BSO.TerminaTransaccao();
+                transacaoIniciada = false;
+
+                // 10. Mensagem de sucesso
+                PSO.Dialogos.MostraAviso(
+                    totalGravados +
+                    " registos gravados com sucesso!"
+                );
+            }
+            catch (Exception ex)
+            {
+                // Desfazer operações em caso de erro
+                if (transacaoIniciada)
+                {
+                    try
+                    {
+                        BSO.DesfazTransaccao();
+                    }
+                    catch
+                    {
+                        // Preservar a mensagem do erro original
+                    }
+                }
+
+                PSO.MensagensDialogos.MostraErro(
+                    "Erro ao registar os dados: " + ex.Message
+                );
+            }
         }
+
     }
 }

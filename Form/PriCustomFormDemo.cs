@@ -238,57 +238,6 @@ namespace ExtensibilityNduku.Form
 
         private void btnGravar_Click(object sender, EventArgs e)
         {
-            /*
-            PSO.Dialogos.MostraAviso(""+dtoDataUpload.Value);
-            try
-            {
-                
-
-                PSO.Dialogos.MostraAviso("Tryyyy");
-
-                StdBELista lista = BSO.Consulta("Select * from TDU_MovitelDesempenho  where CDU_Data = @CDU_Data");
-                PSO.MensagensDialogos.MostraTDU(lista+"");
-                
-
-                bool existeRegistos = !lista.Vazia();
-                if (existeRegistos)
-                {
-
-                    existeRegistos = PSO.Dialogos.MostraPerguntaSimples("Já existem registos para a data selecionada. Deseja substituir os registos existentes?");
-                    //BSO.DSO.ExecuteSQL("Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) values (@CDU_Agente, @CDU_ID, @CDU_Line, @CDU_Data)");
-                    if (existeRegistos)
-                    {
-                        existeRegistos = false;
-                        BSO.DSO.ExecuteSQL("Delete from TDU_MovitelDesempenho where CDU_Data = @CDU_Data");
-                    }
-                    existeRegistos = true;
-
-                }
-
-
-                if (existeRegistos == false && cboFolha.Text == "Monthly Report")
-                {
-                    BSO.DSO.ExecuteSQL("Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) values (@CDU_Agente, @CDU_ID, @CDU_Line, @CDU_Data)");
-                    for (int i = 0; i < dataGridView1.Rows.Count; i++)
-                    {
-                        //BSO.DSO.Parametros.Edita("CDU_Agente", dataGridView1.Rows[i].Cells[1].Value.ToString());
-                        //BSO.DSO.Parametros.Edita("CDU_ID", dataGridView1.Rows[i].Cells[2].Value.ToString());
-                        //BSO.DSO.Parametros.Edita("CDU_Line", dataGridView1.Rows[i].Cells[3].Value.ToString());
-                        //BSO.DSO.Parametros  ("CDU_Data", grbData.Text);
-                        BSO.DSO.ExecuteSQL($"Insert into TDU_MovitelDesempenho (CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
-                            $"values ('{dataGridView1.Rows[i].Cells[1].Value.ToString()}', '{dataGridView1.Rows[i].Cells[2].Value.ToString()}','{dataGridView1.Rows[i].Cells[3].Value.ToString()}',  {grbData.Text})");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                PSO.MensagensDialogos.MostraErro("Erro ao registar os dados");
-            }
-        }
-
-            *
-            */
-
             bool transacaoIniciada = false;
 
             try
@@ -302,25 +251,112 @@ namespace ExtensibilityNduku.Form
                     return;
                 }
 
-                // 2. Validar o DataGridView
-                if (dataGridView1.Rows.Count == 0)
+                // 2. Validar se existem colunas suficientes
+                if (dataGridView1.Columns.Count <= 5)
                 {
                     PSO.Dialogos.MostraAviso(
-                        "Não existem dados para gravar."
+                        "A estrutura do Excel não corresponde ao formato esperado."
                     );
                     return;
                 }
 
-                // 3. Obter a data selecionada
+                // 3. Listas para armazenar os dados válidos
+                var dadosParaGravar =
+                    new List<Tuple<string, string, string>>();
+
+                // HashSets separados para evitar falsos duplicados
+                var idsExistentes = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                var agentesExistentes = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                // 4. Percorrer e validar o DataGridView
+                foreach (DataGridViewRow linha in dataGridView1.Rows)
+                {
+                    if (linha.IsNewRow)
+                        continue;
+
+                    // Obter os valores das colunas
+                    string agente = Convert.ToString(
+                        linha.Cells[2].Value ?? "").Trim();
+
+                    string id = Convert.ToString(
+                        linha.Cells[3].Value ?? "").Trim();
+
+                    string linhaMovitel = Convert.ToString(
+                        linha.Cells[5].Value ?? "").Trim();
+
+                    // 5. Ignorar linhas completamente vazias
+                    if (string.IsNullOrWhiteSpace(agente) &&
+                        string.IsNullOrWhiteSpace(id))
+                    {
+                        continue;
+                    }
+
+                    // 6. Validar campos obrigatórios
+                    if (string.IsNullOrWhiteSpace(agente) ||
+                        string.IsNullOrWhiteSpace(id))
+                    {
+                        PSO.Dialogos.MostraAviso(
+                            "Existem campos obrigatórios vazios na linha " +
+                            (linha.Index + 1) +
+                            ". Verifique o Agente e o ID."
+                        );
+
+                        return;
+                    }
+
+                    // 7. Verificar IDs duplicados
+                    if (!idsExistentes.Add(id))
+                    {
+                        PSO.Dialogos.MostraAviso(
+                            "ID duplicado encontrado: " + id +
+                            ". Verifique a linha " + (linha.Index + 1) + "."
+                        );
+
+                        return;
+                    }
+
+                    // 8. Verificar agentes duplicados
+                    if (!agentesExistentes.Add(agente))
+                    {
+                        PSO.Dialogos.MostraAviso(
+                            "Agente duplicado encontrado: " + agente +
+                            ". Verifique a linha " + (linha.Index + 1) + "."
+                        );
+
+                        return;
+                    }
+
+                    // 9. Adicionar apenas os dados válidos
+                    dadosParaGravar.Add(
+                        Tuple.Create(agente, id, linhaMovitel)
+                    );
+                }
+
+                // 10. Verificar se existem dados válidos
+                if (dadosParaGravar.Count == 0)
+                {
+                    PSO.Dialogos.MostraAviso(
+                        "Não foram encontrados registos válidos para gravar."
+                    );
+                    return;
+                }
+
+                // 11. Obter a data selecionada
                 DateTime dataSelecionada =
                     Convert.ToDateTime(dtoDataUpload.Value);
 
                 string dataSQL =
                     dataSelecionada.ToString("yyyyMMdd");
 
-                // 4. Verificar se já existem registos para a data
+                // 12. Verificar se já existem registos para a data
                 string sqlConsulta =
-                    "SELECT * FROM TDU_MovitelDesempenho " +
+                    "SELECT TOP 1 CDU_Data " +
+                    "FROM TDU_MovitelDesempenho " +
                     "WHERE CONVERT(date, CDU_Data) = " +
                     "CONVERT(date, '" + dataSQL + "', 112)";
 
@@ -328,7 +364,7 @@ namespace ExtensibilityNduku.Form
 
                 bool existeRegistos = !lista.Vazia();
 
-               
+                // 13. Solicitar confirmação para substituir
                 if (existeRegistos)
                 {
                     bool substituir =
@@ -341,11 +377,11 @@ namespace ExtensibilityNduku.Form
                         return;
                 }
 
-                // 6. Iniciar transação
+                // 14. Iniciar transação
                 BSO.IniciaTransaccao();
                 transacaoIniciada = true;
 
-                // 7. Eliminar registos anteriores, caso existam
+                // 15. Eliminar registos anteriores da mesma data
                 if (existeRegistos)
                 {
                     string sqlDelete =
@@ -356,52 +392,15 @@ namespace ExtensibilityNduku.Form
                     BSO.DSO.ExecuteSQL(sqlDelete);
                 }
 
-                // 8. Percorrer o DataGridView e gravar os dados
+                // 16. Inserir os novos registos
                 int totalGravados = 0;
-                var isDuplicated = new HashSet<string>();
 
-                for (int i = 0; i < dataGridView1.Rows.Count; i++)
+                foreach (var dado in dadosParaGravar)
                 {
-                    DataGridViewRow linha = dataGridView1.Rows[i];
+                    string agente = dado.Item1.Replace("'", "''");
+                    string id = dado.Item2.Replace("'", "''");
+                    string linhaMovitel = dado.Item3.Replace("'", "''");
 
-                    if (linha.IsNewRow)
-                        continue;
-
-                    // Obter valores do Excel
-                    string agente = Convert.ToString(
-                        linha.Cells[2].Value ?? "").Trim();
-
-                    string id = Convert.ToString(
-                        linha.Cells[3].Value ?? "").Trim();
-
-                    string linhaMovitel = Convert.ToString(
-                        linha.Cells[5].Value ?? "").Trim();
-
-                    // Validar campos obrigatórios
-                    if (string.IsNullOrWhiteSpace(agente) ||
-                        string.IsNullOrWhiteSpace(id))
-                    {
-                        PSO.Dialogos.MostraAviso(
-                             "Existem campos obrigatórios vazios na linha " +
-                            (i + 1)
-                        );
-                    } else 
-                        if (!isDuplicated.Add(id) || !isDuplicated.Add(agente))
-                        {
-                            PSO.Dialogos.MostraAviso(
-                                "Valor duplicado encontrado no Excel: " +
-                                id + " - " + agente +
-                                ". Verifique a linha " + (i + 1) + "."
-                            );
-                            return;
-                        }
-
-                    // Escapar apóstrofos para SQL
-                    agente = agente.Replace("'", "''");
-                    id = id.Replace("'", "''");
-                    linhaMovitel = linhaMovitel.Replace("'", "''");
-
-                    // Inserir na tabela CDU
                     string sqlInsert =
                         "INSERT INTO TDU_MovitelDesempenho " +
                         "(CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
@@ -417,11 +416,11 @@ namespace ExtensibilityNduku.Form
                     totalGravados++;
                 }
 
-                // 9. Confirmar transação
+                // 17. Confirmar transação
                 BSO.TerminaTransaccao();
                 transacaoIniciada = false;
 
-                // 10. Mensagem de sucesso
+                // 18. Mensagem de sucesso
                 PSO.Dialogos.MostraAviso(
                     totalGravados +
                     " registos gravados com sucesso!"
@@ -429,7 +428,7 @@ namespace ExtensibilityNduku.Form
             }
             catch (Exception ex)
             {
-                // Desfazer operações em caso de erro
+                // 19. Desfazer transação em caso de erro
                 if (transacaoIniciada)
                 {
                     try
@@ -438,7 +437,7 @@ namespace ExtensibilityNduku.Form
                     }
                     catch
                     {
-                        // Preservar a mensagem do erro original
+                        // Preservar o erro original
                     }
                 }
 
@@ -447,6 +446,9 @@ namespace ExtensibilityNduku.Form
                 );
             }
         }
+        private void grbData_Enter(object sender, EventArgs e)
+        {
 
+        }
     }
 }

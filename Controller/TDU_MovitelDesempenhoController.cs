@@ -3,106 +3,335 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using ExtensibilityNduku.Model;
-using Microsoft.Data.SqlClient;
-using System.Data;
+using System.Windows.Forms;
 
-namespace ExtensibilityNduku.Service
+namespace ExtensibilityNduku.Controller
 {
-    internal class TDU_MovitelDesempenhoService
+    internal class TDU_MovitelDesempenhoController
     {
-        public int Gravar(TDU_MovitelDesempenho desempenho, string connectionString)
-        {
-            if (desempenho == null)
-                throw new ArgumentNullException(nameof(desempenho));
+            // Operações disponibilizadas pelo Primavera
+            private readonly Action<string> executarSQL;
+            private readonly Func<string, bool> existeRegisto;
+            private readonly Action iniciarTransacao;
+            private readonly Action confirmarTransacao;
+            private readonly Action desfazerTransacao;
 
-            return Gravar(new[] { desempenho }, connectionString);
-        }
-
-        public int Gravar(IEnumerable<TDU_MovitelDesempenho> desempenhos, string connectionString)
-        {
-            var colunas = new[]
+            public TDU_MovitelDesempenhoController(
+                Action<string> executarSQL,
+                Func<string, bool> existeRegisto,
+                Action iniciarTransacao,
+                Action confirmarTransacao,
+                Action desfazerTransacao)
             {
-                "CDU_Agente", "CDU_Line", "CDU_LOffS1", "CDU_RGMissInfoBCCS",
-                "CDU_RGAdvertencia", "CDU_RCNumeroChamadas", "CDU_Test1", "CDU_ID"
-            };
-            return Gravar(desempenhos, colunas, connectionString);
-        }
+                this.executarSQL = executarSQL;
+                this.existeRegisto = existeRegisto;
+                this.iniciarTransacao = iniciarTransacao;
+                this.confirmarTransacao = confirmarTransacao;
+                this.desfazerTransacao = desfazerTransacao;
+            }
 
-        public int Gravar(
-            IEnumerable<TDU_MovitelDesempenho> desempenhos,
-            IEnumerable<string> colunas,
-            string connectionString)
-        {
-            if (desempenhos == null)
-                throw new ArgumentNullException(nameof(desempenhos));
-            if (colunas == null)
-                throw new ArgumentNullException(nameof(colunas));
-            if (string.IsNullOrWhiteSpace(connectionString))
-                throw new ArgumentException("A connection string deve ser informada.", nameof(connectionString));
-
-            var lista = desempenhos.ToList();
-            if (lista.Any(desempenho => desempenho == null))
-                throw new ArgumentException("A lista não pode conter registos nulos.", nameof(desempenhos));
-            if (lista.Count == 0)
-                return 0;
-
-            var colunasPermitidas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            // MÉTODO 1 - GRAVAR (INSERT)
+            
+            public int Gravar(
+                DataGridView grid,
+                DateTime dataSelecionada,
+                Func<bool> confirmarSubstituicao)
             {
-                "CDU_Agente", "CDU_Line", "CDU_LOffS1", "CDU_RGMissInfoBCCS",
-                "CDU_RGAdvertencia", "CDU_RCNumeroChamadas", "CDU_Test1", "CDU_ID"
-            };
-            var colunasGravar = colunas.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (colunasGravar.Count == 0 || colunasGravar.Any(coluna => !colunasPermitidas.Contains(coluna)))
-                throw new ArgumentException("A lista de colunas para gravação é inválida.", nameof(colunas));
+                if (grid == null || grid.Columns.Count <= 5)
+                    throw new Exception("Estrutura do Excel inválida.");
 
-            string nomesColunas = string.Join(", ", colunasGravar.Select(coluna => "[" + coluna + "]"));
-            string nomesParametros = string.Join(", ", colunasGravar.Select(coluna => "@" + coluna));
-            string sql = "INSERT INTO TDU_MovitelDesempenho (" + nomesColunas + ") VALUES (" + nomesParametros + ");";
+                var dados = new List<Tuple<string, string, string>>();
 
-            int totalGravado = 0;
-            using (var connection = new SqlConnection(connectionString))
-            {
-                connection.Open();
-                using (var transaction = connection.BeginTransaction())
-                using (var command = new SqlCommand(sql, connection, transaction))
+                var ids = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+                var agentes = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+                // Validar dados antes da transação
+                foreach (DataGridViewRow linha in grid.Rows)
                 {
-                    foreach (var desempenho in lista)
+                    if (linha.IsNewRow)
+                        continue;
+
+                    string agente = Convert.ToString(
+                        linha.Cells[2].Value ?? "").Trim();
+
+                    string id = Convert.ToString(
+                        linha.Cells[3].Value ?? "").Trim();
+
+                    string linhaMovitel = Convert.ToString(
+                        linha.Cells[5].Value ?? "").Trim();
+
+                    // Ignorar linhas vazias e tabela de resumo
+                    if (string.IsNullOrWhiteSpace(agente) &&
+                        string.IsNullOrWhiteSpace(id))
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(agente) ||
+                        string.IsNullOrWhiteSpace(id))
                     {
-                        command.Parameters.Clear();
-                        foreach (string coluna in colunasGravar)
-                        {
-                            object valor = ObterValor(desempenho, coluna);
-                            SqlDbType tipoParametro = valor is string ? SqlDbType.NVarChar : SqlDbType.Float;
-                            SqlParameter parametro = command.Parameters.Add("@" + coluna, tipoParametro);
-                            if (tipoParametro == SqlDbType.NVarChar)
-                                parametro.Size = 255;
-                            parametro.Value = valor;
-                        }
-                        totalGravado += command.ExecuteNonQuery();
+                        throw new Exception(
+                            "Campos obrigatórios vazios na linha " +
+                            (linha.Index + 1));
                     }
 
-                    transaction.Commit();
+                    if (!ids.Add(id))
+                        throw new Exception("ID duplicado: " + id);
+
+                    if (!agentes.Add(agente))
+                        throw new Exception("Agente duplicado: " + agente);
+
+                    dados.Add(Tuple.Create(
+                        agente, id, linhaMovitel));
+                }
+
+                if (dados.Count == 0)
+                    throw new Exception("Não existem dados válidos para gravar.");
+
+                string dataSQL = dataSelecionada.ToString("yyyyMMdd");
+
+                string sqlConsulta =
+                    "SELECT TOP 1 CDU_Data " +
+                    "FROM TDU_MovitelDesempenho " +
+                    "WHERE CONVERT(date, CDU_Data) = " +
+                    "CONVERT(date, '" + dataSQL + "', 112)";
+
+                bool existe = existeRegisto(sqlConsulta);
+
+                if (existe && !confirmarSubstituicao())
+                    return 0;
+
+                bool transacaoIniciada = false;
+
+                try
+                {
+                    iniciarTransacao();
+                    transacaoIniciada = true;
+
+                    if (existe)
+                    {
+                        string sqlDelete =
+                            "DELETE FROM TDU_MovitelDesempenho " +
+                            "WHERE CONVERT(date, CDU_Data) = " +
+                            "CONVERT(date, '" + dataSQL + "', 112)";
+
+                        executarSQL(sqlDelete);
+                    }
+
+                    foreach (var dado in dados)
+                    {
+                        string agente = dado.Item1.Replace("'", "''");
+                        string id = dado.Item2.Replace("'", "''");
+                        string linhaMovitel = dado.Item3.Replace("'", "''");
+
+                        string sqlInsert =
+                            "INSERT INTO TDU_MovitelDesempenho " +
+                            "(CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
+                            "VALUES (" +
+                            "N'" + agente + "', " +
+                            "N'" + id + "', " +
+                            "N'" + linhaMovitel + "', " +
+                            "CONVERT(date, '" + dataSQL + "', 112))";
+
+                        executarSQL(sqlInsert);
+                    }
+
+                    confirmarTransacao();
+                    transacaoIniciada = false;
+
+                    return dados.Count;
+                }
+                catch
+                {
+                    if (transacaoIniciada)
+                    {
+                        try { desfazerTransacao(); }
+                        catch { }
+                    }
+
+                    throw;
                 }
             }
 
-            return totalGravado;
-        }
+            // MÉTODO 2 - UPDATE
 
-        private static object ObterValor(TDU_MovitelDesempenho desempenho, string coluna)
-        {
-            switch (coluna)
+            public int Update(
+                string nomeFolha,
+                DataGridView grid)
             {
-                case "CDU_Agente": return desempenho.CDU_Agente;
-                case "CDU_Line": return desempenho.CDU_Line;
-                case "CDU_LOffS1": return desempenho.CDU_LOffS1;
-                case "CDU_RGMissInfoBCCS": return desempenho.CDU_RGMissInfoBCCS;
-                case "CDU_RGAdvertencia": return desempenho.CDU_RGAdvertencia;
-                case "CDU_RCNumeroChamadas": return desempenho.CDU_RCNumeroChamadas;
-                case "CDU_Test1": return desempenho.CDU_Test1;
-                case "CDU_ID": return desempenho.CDU_ID;
-                default: throw new ArgumentOutOfRangeException(nameof(coluna), coluna, "Coluna não suportada.");
+                // Configuração das folhas
+                var configuracoes =
+                    new Dictionary<string, Tuple<string, int, string,
+                        List<Tuple<int, string>>>>(
+                        StringComparer.OrdinalIgnoreCase);
+
+            // FOLHA Listen Offline
+            configuracoes.Add("Listen Offline",
+                    Tuple.Create(
+                        "TDU_MovitelDesempenho",
+                        3,
+                        "CDU_ID",
+                        new List<Tuple<int, string>>
+                        {
+                        Tuple.Create(8, "CDU_LOffS1"),
+                        Tuple.Create(9, "CDU_LOffS2"),
+                        Tuple.Create(10, "CDU_LOffS3"),
+                        Tuple.Create(11, "CDU_LOffS4")
+                        }
+                    ));
+
+            // FOLHA Test
+            configuracoes.Add("Test",
+                    Tuple.Create(
+                        "TDU_MovitelDesempenho",
+                        3,
+                        "CDU_ID",
+                        new List<Tuple<int, string>>
+                        {
+                        Tuple.Create(8, "CDU_Test1"),
+                        Tuple.Create(9, "CDU_Test2")
+                        }
+                    ));
+
+            // FOLHA Regulation
+            configuracoes.Add("Regulation",
+                    Tuple.Create(
+                        "TDU_MovitelDesempenho",
+                        3,
+                        "CDU_ID",
+                        new List<Tuple<int, string>>
+                        {
+                        Tuple.Create(8, "CDU_RGArriveLate"),
+                        Tuple.Create(9, "CDU_RGAbsence"),
+                        Tuple.Create(8, "CDU_RGBadAttitude"),
+                        Tuple.Create(9, "CDU_RGMissInfoBCCS"),
+                        Tuple.Create(8, "CDU_RGAdvertencia"),
+                        }
+                    ));
+
+            // FOLHA Received Calls
+            configuracoes.Add("Received Calls",
+                    Tuple.Create(
+                        "TDU_MovitelDesempenho",
+                        5,
+                        "CDU_ID",
+                        new List<Tuple<int, string>>
+                        {
+                        Tuple.Create(9, "CDU_RCNumeroChamadas"),
+                        }
+                    ));
+
+            // FOLHA Regulation
+            configuracoes.Add("Digital",
+                    Tuple.Create(
+                        "TDU_MovitelDesempenho",
+                        9,
+                        "CDU_ID",
+                        new List<Tuple<int, string>>
+                        {
+                        Tuple.Create(8, "CDU_DigiChat"),
+                        Tuple.Create(9, "CDU_DigiTicket"),
+                        }
+                    ));
+
+            if (!configuracoes.ContainsKey(nomeFolha))
+                    throw new Exception(
+                        "Folha não configurada: " + nomeFolha);
+
+                if (grid == null || grid.Columns.Count == 0)
+                    throw new Exception("DataGridView inválido.");
+
+                var config = configuracoes[nomeFolha];
+
+                string tabela = config.Item1;
+                int colunaChave = config.Item2;
+                string chaveSQL = config.Item3;
+                var campos = config.Item4;
+
+                var comandos = new List<string>();
+
+                var chaves = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+                // Preparar os UPDATE
+                foreach (DataGridViewRow linha in grid.Rows)
+                {
+                    if (linha.IsNewRow)
+                        continue;
+
+                    string chave = Convert.ToString(
+                        linha.Cells[colunaChave].Value ?? "").Trim();
+
+                    if (string.IsNullOrWhiteSpace(chave))
+                        continue;
+
+                    if (!chaves.Add(chave))
+                        throw new Exception(
+                            "Identificador duplicado: " + chave);
+
+                    var valores = new List<string>();
+
+                    foreach (var campo in campos)
+                    {
+                        string valor = Convert.ToString(
+                            linha.Cells[campo.Item1].Value ?? "").Trim();
+
+                        // Não atualizar campos vazios
+                        if (string.IsNullOrWhiteSpace(valor))
+                            continue;
+
+                        valor = valor.Replace("'", "''");
+
+                        valores.Add(
+                            campo.Item2 + " = N'" + valor + "'");
+                    }
+
+                    if (valores.Count == 0)
+                        continue;
+
+                    string chaveSegura = chave.Replace("'", "''");
+
+                    string sql =
+                        "UPDATE " + tabela +
+                        " SET " + string.Join(", ", valores) +
+                        " WHERE " + chaveSQL +
+                        " = N'" + chaveSegura + "'";
+
+                    comandos.Add(sql);
+                }
+
+                if (comandos.Count == 0)
+                    throw new Exception(
+                        "Não existem dados válidos para atualizar.");
+
+                bool transacaoIniciada = false;
+
+                try
+                {
+                    iniciarTransacao();
+                    transacaoIniciada = true;
+
+                    foreach (string sql in comandos)
+                    {
+                        executarSQL(sql);
+                    }
+
+                    confirmarTransacao();
+                    transacaoIniciada = false;
+
+                    return comandos.Count;
+                }
+                catch
+                {
+                    if (transacaoIniciada)
+                    {
+                        try { desfazerTransacao(); }
+                        catch { }
+                    }
+
+                    throw;
+                }
             }
         }
     }
-}

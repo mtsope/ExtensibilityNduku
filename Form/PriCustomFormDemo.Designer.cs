@@ -56,7 +56,6 @@
             this.grbData.TabIndex = 0;
             this.grbData.TabStop = false;
             this.grbData.Text = "Data";
-            this.grbData.Enter += new System.EventHandler(this.grbData_Enter);
             // 
             // btnGravar
             // 

@@ -189,16 +189,6 @@ namespace ExtensibilityNduku.Form
                     dataGridView1.Columns[indice].ReadOnly = false;
                 }
 
-                //    MessageBox.Show(
-                //        "Folha carregada com sucesso!\n\n" +
-                //        "Folha: " + nomeFolha + "\n" +
-                //        "Total de linhas: " + tabela.Rows.Count + "\n" +
-                //        "Total de colunas: " +
-                //        (tabela.Columns.Count - 1),
-                //        "Excel",
-                //        MessageBoxButtons.OK,
-                //        MessageBoxIcon.Information);
-
             }
             catch (Exception ex)
             {
@@ -238,217 +228,75 @@ namespace ExtensibilityNduku.Form
 
         private void btnGravar_Click(object sender, EventArgs e)
         {
-            bool transacaoIniciada = false;
-
             try
             {
-                // 1. Validar a folha selecionada
-                if (cboFolha.Text != "Monthly Report")
-                {
-                    PSO.Dialogos.MostraAviso(
-                        "Selecione a folha Monthly Report."
+                // Criar o controller
+                var controller = new
+                    ExtensibilityNduku.Controller.TDU_MovitelDesempenhoController(
+
+                        // Executar SQL
+                        sql => BSO.DSO.ExecuteSQL(sql),
+
+                        // Verificar se existem registos
+                        sql => !BSO.Consulta(sql).Vazia(),
+
+                        // Iniciar transação
+                        () => BSO.IniciaTransaccao(),
+
+                        // Confirmar transação
+                        () => BSO.TerminaTransaccao(),
+
+                        // Desfazer transação
+                        () => BSO.DesfazTransaccao()
                     );
-                    return;
-                }
 
-                // 2. Validar se existem colunas suficientes
-                if (dataGridView1.Columns.Count <= 5)
+                int total;
+
+                // MONTHLY REPORT - INSERT
+               
+
+                if (cboFolha.Text == "Monthly Report")
                 {
-                    PSO.Dialogos.MostraAviso(
-                        "A estrutura do Excel não corresponde ao formato esperado."
-                    );
-                    return;
-                }
+                    total = controller.Gravar(
+                        dataGridView1,
+                        Convert.ToDateTime(dtoDataUpload.Value),
 
-                // 3. Listas para armazenar os dados válidos
-                var dadosParaGravar =
-                    new List<Tuple<string, string, string>>();
-
-                // HashSets separados para evitar falsos duplicados
-                var idsExistentes = new HashSet<string>(
-                    StringComparer.OrdinalIgnoreCase
-                );
-
-                var agentesExistentes = new HashSet<string>(
-                    StringComparer.OrdinalIgnoreCase
-                );
-
-                // 4. Percorrer e validar o DataGridView
-                foreach (DataGridViewRow linha in dataGridView1.Rows)
-                {
-                    if (linha.IsNewRow)
-                        continue;
-
-                    // Obter os valores das colunas
-                    string agente = Convert.ToString(
-                        linha.Cells[2].Value ?? "").Trim();
-
-                    string id = Convert.ToString(
-                        linha.Cells[3].Value ?? "").Trim();
-
-                    string linhaMovitel = Convert.ToString(
-                        linha.Cells[5].Value ?? "").Trim();
-
-                    // 5. Ignorar linhas completamente vazias
-                    if (string.IsNullOrWhiteSpace(agente) &&
-                        string.IsNullOrWhiteSpace(id))
-                    {
-                        continue;
-                    }
-
-                    // 6. Validar campos obrigatórios
-                    if (string.IsNullOrWhiteSpace(agente) ||
-                        string.IsNullOrWhiteSpace(id))
-                    {
-                        PSO.Dialogos.MostraAviso(
-                            "Existem campos obrigatórios vazios na linha " +
-                            (linha.Index + 1) +
-                            ". Verifique o Agente e o ID."
-                        );
-
-                        return;
-                    }
-
-                    // 7. Verificar IDs duplicados
-                    if (!idsExistentes.Add(id))
-                    {
-                        PSO.Dialogos.MostraAviso(
-                            "ID duplicado encontrado: " + id +
-                            ". Verifique a linha " + (linha.Index + 1) + "."
-                        );
-
-                        return;
-                    }
-
-                    // 8. Verificar agentes duplicados
-                    if (!agentesExistentes.Add(agente))
-                    {
-                        PSO.Dialogos.MostraAviso(
-                            "Agente duplicado encontrado: " + agente +
-                            ". Verifique a linha " + (linha.Index + 1) + "."
-                        );
-
-                        return;
-                    }
-
-                    // 9. Adicionar apenas os dados válidos
-                    dadosParaGravar.Add(
-                        Tuple.Create(agente, id, linhaMovitel)
-                    );
-                }
-
-                // 10. Verificar se existem dados válidos
-                if (dadosParaGravar.Count == 0)
-                {
-                    PSO.Dialogos.MostraAviso(
-                        "Não foram encontrados registos válidos para gravar."
-                    );
-                    return;
-                }
-
-                // 11. Obter a data selecionada
-                DateTime dataSelecionada =
-                    Convert.ToDateTime(dtoDataUpload.Value);
-
-                string dataSQL =
-                    dataSelecionada.ToString("yyyyMMdd");
-
-                // 12. Verificar se já existem registos para a data
-                string sqlConsulta =
-                    "SELECT TOP 1 CDU_Data " +
-                    "FROM TDU_MovitelDesempenho " +
-                    "WHERE CONVERT(date, CDU_Data) = " +
-                    "CONVERT(date, '" + dataSQL + "', 112)";
-
-                StdBELista lista = BSO.Consulta(sqlConsulta);
-
-                bool existeRegistos = !lista.Vazia();
-
-                // 13. Solicitar confirmação para substituir
-                if (existeRegistos)
-                {
-                    bool substituir =
-                        PSO.Dialogos.MostraPerguntaSimples(
-                            "Já existem registos para a data selecionada. " +
+                        // Confirmar substituição dos registos
+                        () => PSO.Dialogos.MostraPerguntaSimples(
+                            "Já existem registos para esta data. " +
                             "Deseja substituir os registos existentes?"
-                        );
+                        )
+                    );
 
-                    if (!substituir)
+                    if (total == 0)
                         return;
+
+                    PSO.Dialogos.MostraAviso(
+                        total + " registos gravados com sucesso!"
+                    );
                 }
 
-                // 14. Iniciar transação
-                BSO.IniciaTransaccao();
-                transacaoIniciada = true;
+                // OUTRAS FOLHAS - UPDATE
 
-                // 15. Eliminar registos anteriores da mesma data
-                if (existeRegistos)
+                else
                 {
-                    string sqlDelete =
-                        "DELETE FROM TDU_MovitelDesempenho " +
-                        "WHERE CONVERT(date, CDU_Data) = " +
-                        "CONVERT(date, '" + dataSQL + "', 112)";
+                    total = controller.Update(
+                        cboFolha.Text,
+                        dataGridView1
+                    );
 
-                    BSO.DSO.ExecuteSQL(sqlDelete);
+                    PSO.Dialogos.MostraAviso(
+                        total + " comandos de atualização executados " +
+                        "na folha " + cboFolha.Text + "."
+                    );
                 }
-
-                // 16. Inserir os novos registos
-                int totalGravados = 0;
-
-                foreach (var dado in dadosParaGravar)
-                {
-                    string agente = dado.Item1.Replace("'", "''");
-                    string id = dado.Item2.Replace("'", "''");
-                    string linhaMovitel = dado.Item3.Replace("'", "''");
-
-                    string sqlInsert =
-                        "INSERT INTO TDU_MovitelDesempenho " +
-                        "(CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
-                        "VALUES (" +
-                        "'" + agente + "', " +
-                        "'" + id + "', " +
-                        "'" + linhaMovitel + "', " +
-                        "CONVERT(date, '" + dataSQL + "', 112)" +
-                        ")";
-
-                    BSO.DSO.ExecuteSQL(sqlInsert);
-
-                    totalGravados++;
-                }
-
-                // 17. Confirmar transação
-                BSO.TerminaTransaccao();
-                transacaoIniciada = false;
-
-                // 18. Mensagem de sucesso
-                PSO.Dialogos.MostraAviso(
-                    totalGravados +
-                    " registos gravados com sucesso!"
-                );
             }
             catch (Exception ex)
             {
-                // 19. Desfazer transação em caso de erro
-                if (transacaoIniciada)
-                {
-                    try
-                    {
-                        BSO.DesfazTransaccao();
-                    }
-                    catch
-                    {
-                        // Preservar o erro original
-                    }
-                }
-
                 PSO.MensagensDialogos.MostraErro(
-                    "Erro ao registar os dados: " + ex.Message
+                    "Erro ao processar os dados: " + ex.Message
                 );
             }
-        }
-        private void grbData_Enter(object sender, EventArgs e)
-        {
-
         }
     }
 }

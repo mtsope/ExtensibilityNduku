@@ -1,7 +1,6 @@
 ﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Bibliography;
 using ExtensibilityNduku.Model;
-using ExtensibilityNduku.Service;
 using Primavera.Extensibility.BusinessEntities;
 using Primavera.Extensibility.CustomForm;
 using StdBE100;
@@ -297,6 +296,11 @@ namespace ExtensibilityNduku.Form
                     "Erro ao processar os dados: " + ex.Message
                 );
             }
+        }
+
+        private void grbListagm_Enter(object sender, EventArgs e)
+        {
+
         }
     }
 }

@@ -189,8 +189,8 @@ namespace ExtensibilityNduku.Controller
                         "CDU_ID",
                         new List<Tuple<int, string>>
                         {
-                        Tuple.Create(8, "CDU_Test1"),
-                        Tuple.Create(9, "CDU_Test2")
+                        Tuple.Create(7, "CDU_Test1"),
+                        Tuple.Create(8, "CDU_Test2")
                         }
                     ));
 
@@ -204,9 +204,9 @@ namespace ExtensibilityNduku.Controller
                         {
                         Tuple.Create(8, "CDU_RGArriveLate"),
                         Tuple.Create(9, "CDU_RGAbsence"),
-                        Tuple.Create(8, "CDU_RGBadAttitude"),
-                        Tuple.Create(9, "CDU_RGMissInfoBCCS"),
-                        Tuple.Create(8, "CDU_RGAdvertencia"),
+                        Tuple.Create(10, "CDU_RGBadAttitude"),
+                        Tuple.Create(11, "CDU_RGMissInfoBCCS"),
+                        Tuple.Create(12, "CDU_RGAdvertencia"),
                         }
                     ));
 
@@ -218,7 +218,7 @@ namespace ExtensibilityNduku.Controller
                         "CDU_ID",
                         new List<Tuple<int, string>>
                         {
-                        Tuple.Create(9, "CDU_RCNumeroChamadas"),
+                        Tuple.Create(8, "CDU_RCNumeroChamadas"),
                         }
                     ));
 
@@ -226,12 +226,12 @@ namespace ExtensibilityNduku.Controller
             configuracoes.Add("Digital",
                     Tuple.Create(
                         "TDU_MovitelDesempenho",
-                        9,
+                        3,
                         "CDU_ID",
                         new List<Tuple<int, string>>
                         {
-                        Tuple.Create(8, "CDU_DigiChat"),
-                        Tuple.Create(9, "CDU_DigiTicket"),
+                        Tuple.Create(11, "CDU_DigiChat"),
+                        Tuple.Create(12, "CDU_DigiTicket"),
                         }
                     ));
 

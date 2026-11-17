@@ -1,342 +1,628 @@
-﻿using System;
+﻿using ClosedXML.Excel;
+using ExtensibilityNduku.Model;
+using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows.Forms;
+using System.IO;
+
 
 namespace ExtensibilityNduku.Controller
 {
     internal class TDU_MovitelDesempenhoController
     {
-            // Operações disponibilizadas pelo Primavera
-            private readonly Action<string> executarSQL;
-            private readonly Func<string, bool> existeRegisto;
-            private readonly Action iniciarTransacao;
-            private readonly Action confirmarTransacao;
-            private readonly Action desfazerTransacao;
+            // Configurações das folhas
+            private Dictionary<string, ConfiguracaoFolha> configuracoes;
 
-            public TDU_MovitelDesempenhoController(
-                Action<string> executarSQL,
-                Func<string, bool> existeRegisto,
-                Action iniciarTransacao,
-                Action confirmarTransacao,
-                Action desfazerTransacao)
+            public TDU_MovitelDesempenhoController()
             {
-                this.executarSQL = executarSQL;
-                this.existeRegisto = existeRegisto;
-                this.iniciarTransacao = iniciarTransacao;
-                this.confirmarTransacao = confirmarTransacao;
-                this.desfazerTransacao = desfazerTransacao;
+                configuracoes = CriarConfiguracoes();
             }
 
-            // MÉTODO 1 - GRAVAR (INSERT)
-            
-            public int Gravar(
-                DataGridView grid,
-                DateTime dataSelecionada,
-                Func<bool> confirmarSubstituicao)
+            // =====================================================
+            // 1. CONFIGURAR AS FOLHAS
+            // =====================================================
+
+            private Dictionary<string, ConfiguracaoFolha>
+                CriarConfiguracoes()
             {
-                if (grid == null || grid.Columns.Count <= 5)
-                    throw new Exception("Estrutura do Excel inválida.");
-
-                var dados = new List<Tuple<string, string, string>>();
-
-                var ids = new HashSet<string>(
-                    StringComparer.OrdinalIgnoreCase);
-
-                var agentes = new HashSet<string>(
-                    StringComparer.OrdinalIgnoreCase);
-
-                // Validar dados antes da transação
-                foreach (DataGridViewRow linha in grid.Rows)
-                {
-                    if (linha.IsNewRow)
-                        continue;
-
-                    string agente = Convert.ToString(
-                        linha.Cells[2].Value ?? "").Trim();
-
-                    string id = Convert.ToString(
-                        linha.Cells[3].Value ?? "").Trim();
-
-                    string linhaMovitel = Convert.ToString(
-                        linha.Cells[5].Value ?? "").Trim();
-
-                    // Ignorar linhas vazias e tabela de resumo
-                    if (string.IsNullOrWhiteSpace(agente) &&
-                        string.IsNullOrWhiteSpace(id))
-                        continue;
-
-                    if (string.IsNullOrWhiteSpace(agente) ||
-                        string.IsNullOrWhiteSpace(id))
-                    {
-                        throw new Exception(
-                            "Campos obrigatórios vazios na linha " +
-                            (linha.Index + 1));
-                    }
-
-                    if (!ids.Add(id))
-                        throw new Exception("ID duplicado: " + id);
-
-                    if (!agentes.Add(agente))
-                        throw new Exception("Agente duplicado: " + agente);
-
-                    dados.Add(Tuple.Create(
-                        agente, id, linhaMovitel));
-                }
-
-                if (dados.Count == 0)
-                    throw new Exception("Não existem dados válidos para gravar.");
-
-                string dataSQL = dataSelecionada.ToString("yyyyMMdd");
-
-                string sqlConsulta =
-                    "SELECT TOP 1 CDU_Data " +
-                    "FROM TDU_MovitelDesempenho " +
-                    "WHERE CONVERT(date, CDU_Data) = " +
-                    "CONVERT(date, '" + dataSQL + "', 112)";
-
-                bool existe = existeRegisto(sqlConsulta);
-
-                if (existe && !confirmarSubstituicao())
-                    return 0;
-
-                bool transacaoIniciada = false;
-
-                try
-                {
-                    iniciarTransacao();
-                    transacaoIniciada = true;
-
-                    if (existe)
-                    {
-                        string sqlDelete =
-                            "DELETE FROM TDU_MovitelDesempenho " +
-                            "WHERE CONVERT(date, CDU_Data) = " +
-                            "CONVERT(date, '" + dataSQL + "', 112)";
-
-                        executarSQL(sqlDelete);
-                    }
-
-                    foreach (var dado in dados)
-                    {
-                        string agente = dado.Item1.Replace("'", "''");
-                        string id = dado.Item2.Replace("'", "''");
-                        string linhaMovitel = dado.Item3.Replace("'", "''");
-
-                        string sqlInsert =
-                            "INSERT INTO TDU_MovitelDesempenho " +
-                            "(CDU_Agente, CDU_ID, CDU_Line, CDU_Data) " +
-                            "VALUES (" +
-                            "N'" + agente + "', " +
-                            "N'" + id + "', " +
-                            "N'" + linhaMovitel + "', " +
-                            "CONVERT(date, '" + dataSQL + "', 112))";
-
-                        executarSQL(sqlInsert);
-                    }
-
-                    confirmarTransacao();
-                    transacaoIniciada = false;
-
-                    return dados.Count;
-                }
-                catch
-                {
-                    if (transacaoIniciada)
-                    {
-                        try { desfazerTransacao(); }
-                        catch { }
-                    }
-
-                    throw;
-                }
-            }
-
-            // MÉTODO 2 - UPDATE
-
-            public int Update(
-                string nomeFolha,
-                DataGridView grid, DateTime dataSelecionada)
-            {
-                // Configuração das folhas
-                var configuracoes =
-                    new Dictionary<string, Tuple<string, int, string,
-                        List<Tuple<int, string>>>>(
+                var configs =
+                    new Dictionary<string, ConfiguracaoFolha>(
                         StringComparer.OrdinalIgnoreCase);
+
+                // MONTHLY REPORT
+                configs.Add("Monthly Report",
+                    new ConfiguracaoFolha
+                    {
+                        NomeFolha = "Monthly Report",
+                        TabelaSQL = "TDU_MovitelDesempenho",
+                        Operacao = TipoOperacao.Insert,
+                        PrimeiraLinhaDados = 6,
+                        ColunaChaveExcel = 3,
+                        ColunaChaveSQL = "CDU_ID",
+                        ColunaDataSQL = "CDU_Data",
+
+                        Colunas = new List<MapeamentoColuna>
+                        {
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 2,
+                            ColunaSQL = "CDU_Agente"
+                        },
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 5,
+                            ColunaSQL = "CDU_Line"
+                        }
+                        }
+                    });
+
+            // LISTEN OFFLINE
+            configs.Add("Listen Offline",
+                new ConfiguracaoFolha
+                {
+                    NomeFolha = "Listen Offline",
+                    TabelaSQL = "TDU_MovitelDesempenho",
+                    Operacao = TipoOperacao.Update,
+                    PrimeiraLinhaDados = 6,
+                    ColunaChaveExcel = 3,
+                    ColunaChaveSQL = "CDU_ID",
+                    ColunaDataSQL = "CDU_Data",
+
+                    Colunas = new List<MapeamentoColuna>
+                    {
+                            new MapeamentoColuna
+                        {
+                            ColunaExcel = 8,
+                            ColunaSQL = "CDU_LOffS1"
+                        },
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 9,
+                            ColunaSQL = "CDU_LOffS2"
+                        },
+                         new MapeamentoColuna
+                        {
+                            ColunaExcel = 10,
+                            ColunaSQL = "CDU_LOffS3"
+                        },
+                           new MapeamentoColuna
+                        {
+                            ColunaExcel = 11,
+                            ColunaSQL = "CDU_LOffS4"
+                           }
+                    }
+                });
+                // TEST
+                configs.Add("Test",
+                    new ConfiguracaoFolha
+                    {
+                        NomeFolha = "Test",
+                        TabelaSQL = "TDU_MovitelDesempenho",
+                        Operacao = TipoOperacao.Update,
+                        PrimeiraLinhaDados = 6,
+                        ColunaChaveExcel = 3,
+                        ColunaChaveSQL = "CDU_ID",
+                        ColunaDataSQL = "CDU_Data",
+
+                        Colunas = new List<MapeamentoColuna>
+                        {
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 7,
+                            ColunaSQL = "CDU_Test1"
+                        },
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 8,
+                            ColunaSQL = "CDU_Test2"
+                        }
+                        }
+                    });
+
+                // REGULATION
+                configs.Add("Regulation",
+                    new ConfiguracaoFolha
+                    {
+                        NomeFolha = "Regulation",
+                        TabelaSQL = "TDU_MovitelDesempenho",
+                        Operacao = TipoOperacao.Update,
+                        PrimeiraLinhaDados = 6,
+                        ColunaChaveExcel = 3,
+                        ColunaChaveSQL = "CDU_ID",
+                        ColunaDataSQL = "CDU_Data",
+                        Colunas = new List<MapeamentoColuna>
+                        {
+                            new MapeamentoColuna
+                             {
+                                 ColunaExcel = 8,
+                                 ColunaSQL = "CDU_RGArriveLate"
+                             },
+                            new MapeamentoColuna
+                            {
+                                ColunaExcel = 9,
+                                ColunaSQL = "CDU_RGAbsence"
+                            },
+                            new MapeamentoColuna
+                            {
+                                ColunaExcel = 10,
+                                ColunaSQL = "CDU_RGBadAttitude"
+                            },
+                            new MapeamentoColuna
+                            {
+                                ColunaExcel = 11,
+                                ColunaSQL = "CDU_RGMissInfoBCCS"
+                            },
+                             new MapeamentoColuna
+                            {
+                                ColunaExcel = 12,
+                                ColunaSQL = "CDU_RGAdvertencia"
+                            }
+                    }
+                    });
+
+                // RECIEVED CALLS
+                configs.Add("Received Calls",
+                    new ConfiguracaoFolha
+                    {
+                        NomeFolha = "Received Calls",
+                        TabelaSQL = "TDU_MovitelDesempenho",
+                        Operacao = TipoOperacao.Update,
+                        PrimeiraLinhaDados = 6,
+                        ColunaChaveExcel = 5,
+                        ColunaChaveSQL = "CDU_ID",
+                        ColunaDataSQL = "CDU_Data",
+                        Colunas = new List<MapeamentoColuna>
+                        { 
+                              new MapeamentoColuna
+                            {
+                                ColunaExcel = 8,
+                                ColunaSQL = "CDU_RCNumeroChamadas"
+                            },
+                        
+                        }
+                    });
+
+                // DIGITAL
+                configs.Add("Digital",
+                    new ConfiguracaoFolha
+                    {
+                        NomeFolha = "Digital",
+                        TabelaSQL = "TDU_MovitelDesempenho",
+                        Operacao = TipoOperacao.Update,
+                        PrimeiraLinhaDados = 6,
+                        ColunaChaveExcel = 3,
+                        ColunaChaveSQL = "CDU_ID",
+                        ColunaDataSQL = "CDU_Data",
+                        Colunas = new List<MapeamentoColuna>
+                        {
+                              new MapeamentoColuna
+                        {
+                            ColunaExcel = 4,
+                            ColunaSQL = "CDU_DigiChat"
+                        },
+                        new MapeamentoColuna
+                        {
+                            ColunaExcel = 5,
+                            ColunaSQL = "CDU_DigiTicket"
+                        }
+                        }
+                    });
+
+                return configs;
+            }
+
+            // =====================================================
+            // 2. VALIDAR IDENTIFICADORES SQL
+            // =====================================================
+
+            private void ValidarIdentificador(string nome)
+            {
+                if (string.IsNullOrWhiteSpace(nome) ||
+                    !Regex.IsMatch(nome, @"^[a-zA-Z0-9_]+$"))
+                {
+                    throw new Exception(
+                        "Identificador SQL inválido: " + nome);
+                }
+            }
+
+            // =====================================================
+            // 3. ESCAPAR VALORES SQL
+            // =====================================================
+
+            private string SqlValor(string valor)
+            {
+                return "'" + (valor ?? "").Replace("'", "''") + "'";
+            }
+
+
+        // =====================================================
+        // 4. PROCESSAR TODAS AS FOLHAS
+        // =====================================================
+
+        public ResultadoProcessamento ProcessarTodasFolhas(
+            dynamic BSO,
+            string caminhoExcel,
+            IEnumerable<string> folhasSelecionadas,
+            DateTime dataSelecionada,
+            Func<string, bool> confirmarSubstituicao,
+            Action<string> reportarProgresso = null)
+        {
+            if (string.IsNullOrWhiteSpace(caminhoExcel) ||
+                !File.Exists(caminhoExcel))
+            {
+                throw new Exception(
+                    "Selecione um ficheiro Excel válido.");
+            }
+
+            var folhas = folhasSelecionadas
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (folhas.Count == 0)
+                throw new Exception(
+                    "Não existem folhas para processar.");
+
+            var resultado = new ResultadoProcessamento();
 
             string dataSQL = dataSelecionada.ToString("yyyyMMdd");
 
-
-            // FOLHA Listen Offline
-            configuracoes.Add("Listen Offline",
-                    Tuple.Create(
-                        "TDU_MovitelDesempenho",
-                        3,
-                        "CDU_ID",
-                        new List<Tuple<int, string>>
-                        {
-                        Tuple.Create(8, "CDU_LOffS1"),
-                        Tuple.Create(9, "CDU_LOffS2"),
-                        Tuple.Create(10, "CDU_LOffS3"),
-                        Tuple.Create(11, "CDU_LOffS4")
-                        }
-                    ));
-
-            // FOLHA Test
-            configuracoes.Add("Test",
-                    Tuple.Create(
-                        "TDU_MovitelDesempenho",
-                        3,
-                        "CDU_ID",
-                        new List<Tuple<int, string>>
-                        {
-                        Tuple.Create(7, "CDU_Test1"),
-                        Tuple.Create(8, "CDU_Test2")
-                        }
-                    ));
-
-            // FOLHA Regulation
-            configuracoes.Add("Regulation",
-                    Tuple.Create(
-                        "TDU_MovitelDesempenho",
-                        3,
-                        "CDU_ID",
-                        new List<Tuple<int, string>>
-                        {
-                        Tuple.Create(8, "CDU_RGArriveLate"),
-                        Tuple.Create(9, "CDU_RGAbsence"),
-                        Tuple.Create(10, "CDU_RGBadAttitude"),
-                        Tuple.Create(11, "CDU_RGMissInfoBCCS"),
-                        Tuple.Create(12, "CDU_RGAdvertencia"),
-                        }
-                    ));
-
-            // FOLHA Received Calls
-            configuracoes.Add("Received Calls",
-                    Tuple.Create(
-                        "TDU_MovitelDesempenho",
-                        5,
-                        "CDU_ID",
-                        new List<Tuple<int, string>>
-                        {
-                        Tuple.Create(8, "CDU_RCNumeroChamadas"),
-                        }
-                    ));
-
-            // FOLHA Regulation
-            configuracoes.Add("Digital",
-                    Tuple.Create(
-                        "TDU_MovitelDesempenho",
-                        3,
-                        "CDU_ID",
-                        new List<Tuple<int, string>>
-                        {
-                        Tuple.Create(11, "CDU_DigiChat"),
-                        Tuple.Create(12, "CDU_DigiTicket"),
-                        }
-                    ));
-
-            if (!configuracoes.ContainsKey(nomeFolha))
-                    throw new Exception(
-                        "Folha não configurada: " + nomeFolha);
-
-                if (grid == null || grid.Columns.Count == 0)
-                    throw new Exception("DataGridView inválido.");
-
-                var config = configuracoes[nomeFolha];
-
-                string tabela = config.Item1;
-                int colunaChave = config.Item2;
-                string chaveSQL = config.Item3;
-                var campos = config.Item4;
-
-                var comandos = new List<string>();
-
-                var chaves = new HashSet<string>(
+            // Preparar os dados antes de iniciar a transação
+            var dados = new Dictionary<string,
+                List<Dictionary<string, string>>>(
                     StringComparer.OrdinalIgnoreCase);
 
-                // Preparar os UPDATE
-                foreach (DataGridViewRow linha in grid.Rows)
+            // =================================================
+            // 5. LER TODAS AS FOLHAS DO EXCEL
+            // =================================================
+
+            using (var workbook = new XLWorkbook(caminhoExcel))
+            {
+                foreach (string nomeFolha in folhas)
                 {
-                    if (linha.IsNewRow)
-                        continue;
-
-                    string chave = Convert.ToString(
-                        linha.Cells[colunaChave].Value ?? "").Trim();
-
-                    if (string.IsNullOrWhiteSpace(chave))
-                        continue;
-
-                    if (!chaves.Add(chave))
-                        throw new Exception(
-                            "Identificador duplicado: " + chave);
-
-                    var valores = new List<string>();
-
-                    foreach (var campo in campos)
+                    if (!configuracoes.ContainsKey(nomeFolha))
                     {
-                        string valor = Convert.ToString(
-                            linha.Cells[campo.Item1].Value ?? "").Trim();
-
-                        // Não atualizar campos vazios
-                        if (string.IsNullOrWhiteSpace(valor))
-                            continue;
-
-                        valor = valor.Replace("'", "''");
-
-                        valores.Add(
-                            campo.Item2 + " = N'" + valor + "'");
+                        throw new Exception(
+                            "Não existe configuração para a folha: " +
+                            nomeFolha);
                     }
 
-                    if (valores.Count == 0)
+                    var config = configuracoes[nomeFolha];
+
+                    if (reportarProgresso != null)
+                    {
+                        reportarProgresso("A ler folha: " + nomeFolha);
+                    }
+
+                    ValidarIdentificador(config.TabelaSQL);
+                    ValidarIdentificador(config.ColunaChaveSQL);
+                    ValidarIdentificador(config.ColunaDataSQL);
+
+                    if (config.Colunas == null ||
+                        config.Colunas.Count == 0)
+                    {
+                        throw new Exception(
+                            "Não existem colunas configuradas para: " +
+                            nomeFolha);
+                    }
+
+                    foreach (var coluna in config.Colunas)
+                    {
+                        ValidarIdentificador(coluna.ColunaSQL);
+                    }
+
+                    var worksheet = workbook.Worksheets
+                        .FirstOrDefault(w =>
+                            w.Name.Equals(
+                                nomeFolha,
+                                StringComparison.OrdinalIgnoreCase));
+
+                    if (worksheet == null)
+                    {
+                        throw new Exception(
+                            "Folha não encontrada no Excel: " +
+                            nomeFolha);
+                    }
+
+                    var listaRegistos =
+                        new List<Dictionary<string, string>>();
+                    dados[nomeFolha] = listaRegistos;
+
+                    var colunasLeitura = config.Colunas
+                        .Select(c => c.ColunaExcel)
+                        .Concat(new[] { config.ColunaChaveExcel })
+                        .Distinct()
+                        .ToList();
+
+                    var linhasComDados = colunasLeitura
+                        .SelectMany(coluna => worksheet.Column(coluna)
+                            .CellsUsed(XLCellsUsedOptions.Contents)
+                            .Select(celula => celula.Address.RowNumber))
+                        .Where(linha => linha >= config.PrimeiraLinhaDados)
+                        .Distinct()
+                        .OrderBy(linha => linha)
+                        .ToList();
+
+                    if (linhasComDados.Count == 0)
                         continue;
 
-                    string chaveSegura = chave.Replace("'", "''");
-                
-                string where =
-                "CDU_ID = N'" + chaveSegura + "' " +
-                "AND CONVERT(date, CDU_Data) = " +
-                "CONVERT(date, '" + dataSQL + "', 112)";
+                    var chaves = new HashSet<string>(
+                        StringComparer.OrdinalIgnoreCase);
 
-                // Construir UPDATE
-                string sql =
-                    "UPDATE TDU_MovitelDesempenho " +
-                    "SET " + string.Join(", ", valores) +
-                    " WHERE " + where;
+                    // =============================================
+                    // PERCORRER AS LINHAS DA FOLHA
+                    // =============================================
 
-                    comandos.Add(sql);
+                    for (int indiceLinha = 0;
+                         indiceLinha < linhasComDados.Count;
+                         indiceLinha++)
+                    {
+                        int i = linhasComDados[indiceLinha];
+                        string chave = worksheet
+                            .Cell(i, config.ColunaChaveExcel)
+                            .GetFormattedString().Trim();
+
+                        var valores =
+                            new Dictionary<string, string>();
+                        bool linhaComDados =
+                            !string.IsNullOrWhiteSpace(chave);
+
+                        foreach (var coluna in config.Colunas)
+                        {
+                            string valor = worksheet
+                                .Cell(i, coluna.ColunaExcel)
+                                .GetFormattedString().Trim();
+
+                            valores[coluna.ColunaSQL] = valor;
+                            linhaComDados = linhaComDados ||
+                                !string.IsNullOrWhiteSpace(valor);
+                        }
+
+                        if (!linhaComDados)
+                            continue;
+
+                        if (reportarProgresso != null &&
+                            ((indiceLinha + 1) % 500 == 0 ||
+                             indiceLinha == linhasComDados.Count - 1))
+                        {
+                            reportarProgresso(
+                                "A ler " + nomeFolha + ": linha " + i +
+                                " (" + (indiceLinha + 1) + " de " +
+                                linhasComDados.Count + ")");
+                        }
+
+                        if (string.IsNullOrWhiteSpace(chave))
+                        {
+                            resultado.TotalLinhasIgnoradas++;
+                            continue;
+                        }
+
+                        // Verificar chaves duplicadas
+                        if (!chaves.Add(chave))
+                        {
+                            throw new Exception(
+                                "Chave duplicada " + chave +
+                                " na folha " + nomeFolha +
+                                ", linha " + i);
+                        }
+
+                        valores["__CHAVE__"] = chave;
+
+                        listaRegistos.Add(valores);
+                    }
+
+                    }
+            }
+
+            // A partir daqui mantém o restante código original:
+            // processamento dos dados, INSERT, UPDATE e transação.
+
+
+        // =================================================
+        // 6. CONFIRMAR SUBSTITUIÇÃO PARA INSERT
+        // =================================================
+
+        bool temInsert = folhas.Any(f =>
+                    configuracoes[f].Operacao == TipoOperacao.Insert);
+
+                bool existeRegistos = false;
+
+                if (temInsert)
+                {
+                    // As folhas de INSERT partilham a tabela?
+                    var tabelasInsert = folhas
+                        .Where(f =>
+                            configuracoes[f].Operacao ==
+                            TipoOperacao.Insert)
+                        .Select(f => configuracoes[f].TabelaSQL)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (tabelasInsert.Count != 1)
+                    {
+                        throw new Exception(
+                            "As folhas de INSERT utilizam tabelas diferentes. " +
+                            "A confirmação de substituição deve ser feita " +
+                            "individualmente por tabela.");
+                    }
+
+                    string tabela = tabelasInsert[0];
+
+                    string sqlConsulta =
+                        "SELECT TOP 1 * FROM " + tabela +
+                        " WHERE CONVERT(date, CDU_Data) = " +
+                        "CONVERT(date, '" + dataSQL + "', 112)";
+
+                    var lista = BSO.Consulta(sqlConsulta);
+
+                    existeRegistos = !lista.Vazia();
+
+                    if (existeRegistos)
+                    {
+                        bool substituir = confirmarSubstituicao(
+                            "Já existem registos para a data selecionada. " +
+                            "Deseja substituir os registos existentes?");
+
+                        if (!substituir)
+                            return resultado;
+                    }
                 }
 
-                if (comandos.Count == 0)
-                    throw new Exception(
-                        "Não existem dados válidos para atualizar.");
+                // =================================================
+                // 7. EXECUTAR INSERT E UPDATE
+                // =================================================
 
-                bool transacaoIniciada = false;
+                int totalRegistos = dados.Values.Sum(lista => lista.Count);
+                int registosProcessados = 0;
+
+                BSO.IniciaTransaccao();
+
+                bool transacaoIniciada = true;
 
                 try
                 {
-                    iniciarTransacao();
-                    transacaoIniciada = true;
-
-                    foreach (string sql in comandos)
+                    foreach (string nomeFolha in folhas)
                     {
-                        executarSQL(sql);
+                        var config = configuracoes[nomeFolha];
+
+                        if (!dados.ContainsKey(nomeFolha))
+                            continue;
+
+                        foreach (var registo in dados[nomeFolha])
+                        {
+                            string chave = registo["__CHAVE__"];
+
+                            string chaveSQL = SqlValor(chave);
+
+                            if (config.Operacao == TipoOperacao.Insert)
+                            {
+                                // INSERT
+                                if (existeRegistos)
+                                {
+                                    // Não eliminar dados de outras folhas.
+                                    // A substituição é limitada às chaves
+                                    // desta folha.
+                                    string sqlDelete =
+                                        "DELETE FROM " + config.TabelaSQL +
+                                        " WHERE " + config.ColunaChaveSQL +
+                                        " = " + chaveSQL +
+                                        " AND CONVERT(date, " +
+                                        config.ColunaDataSQL + ") = " +
+                                        "CONVERT(date, '" + dataSQL + "', 112)";
+
+                                    BSO.DSO.ExecuteSQL(sqlDelete);
+                                }
+
+                                var colunas = new List<string>
+                            {
+                                config.ColunaChaveSQL
+                            };
+
+                                var valores = new List<string>
+                            {
+                                chaveSQL
+                            };
+
+                                foreach (var coluna in config.Colunas)
+                                {
+                                    colunas.Add(coluna.ColunaSQL);
+
+                                    valores.Add(
+                                        SqlValor(registo[coluna.ColunaSQL]));
+                                }
+
+                                colunas.Add(config.ColunaDataSQL);
+
+                                valores.Add(
+                                    "CONVERT(date, '" + dataSQL + "', 112)");
+
+                                string sqlInsert =
+                                    "INSERT INTO " + config.TabelaSQL +
+                                    " (" + string.Join(", ", colunas) + ")" +
+                                    " VALUES (" +
+                                    string.Join(", ", valores) + ")";
+
+                                BSO.DSO.ExecuteSQL(sqlInsert);
+
+                                resultado.TotalInseridos++;
+                            }
+                            else
+                            {
+                                // UPDATE
+                                string sqlVerificar =
+                                    "SELECT TOP 1 * FROM " +
+                                    config.TabelaSQL +
+                                    " WHERE " + config.ColunaChaveSQL +
+                                    " = " + chaveSQL +
+                                    " AND CONVERT(date, " +
+                                    config.ColunaDataSQL + ") = " +
+                                    "CONVERT(date, '" + dataSQL + "', 112)";
+
+                                var existente = BSO.Consulta(sqlVerificar);
+
+                                if (!existente.Vazia())
+                                {
+                                    var atualizacoes = new List<string>();
+
+                                    foreach (var coluna in config.Colunas)
+                                    {
+                                        atualizacoes.Add(
+                                            coluna.ColunaSQL + " = " +
+                                            SqlValor(registo[coluna.ColunaSQL]));
+                                    }
+
+                                    string sqlUpdate =
+                                        "UPDATE " + config.TabelaSQL +
+                                        " SET " +
+                                        string.Join(", ", atualizacoes) +
+                                        " WHERE " + config.ColunaChaveSQL +
+                                        " = " + chaveSQL +
+                                        " AND CONVERT(date, " +
+                                        config.ColunaDataSQL + ") = " +
+                                        "CONVERT(date, '" + dataSQL + "', 112)";
+
+                                    BSO.DSO.ExecuteSQL(sqlUpdate);
+
+                                    resultado.TotalAtualizados++;
+                                }
+                                        else
+                                        {
+                                            resultado.TotalNaoEncontrados++;
+                                        }
+                                    }
+
+                                    registosProcessados++;
+                                    if (reportarProgresso != null &&
+                                        (registosProcessados % 5 == 0 ||
+                                         registosProcessados == totalRegistos))
+                                    {
+                                        reportarProgresso(
+                                            "A gravar " + registosProcessados +
+                                            "/" + totalRegistos);
+                                    }
+                                }
+
+                                resultado.Detalhes[nomeFolha] =
+                            "Operação: " + config.Operacao +
+                            " | Registos: " +
+                            dados[nomeFolha].Count;
                     }
 
-                    confirmarTransacao();
+                    resultado.TotalFolhas = folhas.Count;
+
+                    BSO.TerminaTransaccao();
                     transacaoIniciada = false;
 
-                    return comandos.Count;
+                    return resultado;
                 }
                 catch
                 {
                     if (transacaoIniciada)
                     {
-                        try { desfazerTransacao(); }
-                        catch { }
+                        BSO.DesfazTransaccao();
+                        transacaoIniciada = false;
                     }
 
                     throw;

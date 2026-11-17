@@ -105,7 +105,6 @@
             this.grbListagm.TabIndex = 1;
             this.grbListagm.TabStop = false;
             this.grbListagm.Text = "Listagem";
-            this.grbListagm.Enter += new System.EventHandler(this.grbListagm_Enter);
             // 
             // dataGridView1
             // 
@@ -135,7 +134,6 @@
             this.Name = "PriCustomFormDemo";
             this.Size = new System.Drawing.Size(800, 450);
             this.Text = "TDU_MovitelDesempenho";
-            this.Load += new System.EventHandler(this.PriCustomFormDemo_Load);
             this.grbData.ResumeLayout(false);
             this.grbData.PerformLayout();
             this.grbListagm.ResumeLayout(false);

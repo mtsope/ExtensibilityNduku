@@ -1,5 +1,6 @@
 ﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Bibliography;
+using ExtensibilityNduku.Controller;
 using ExtensibilityNduku.Model;
 using Primavera.Extensibility.BusinessEntities;
 using Primavera.Extensibility.CustomForm;
@@ -8,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -27,201 +29,306 @@ namespace ExtensibilityNduku.Form
         private string caminhoExcel = "";
 
         // Controlar o carregamento das folhas
-        private bool carregandoFolhas = false;
+        private bool carregandoFolhas = false; 
 
 
         private void btnBuscar_Click(object sender, EventArgs e)
         {
-            // Abrir janela para selecionar Excel
-
-            using (OpenFileDialog dialog = new OpenFileDialog())
+            try
             {
-                dialog.Filter =
-                    "Ficheiros Excel (*.xlsx)|*.xlsx";
-
-                dialog.Title = "Selecionar ficheiro Excel";
-
-                if (dialog.ShowDialog() != DialogResult.OK)
-                    return;
-
-                try
+                using (OpenFileDialog openFile = new OpenFileDialog())
                 {
-                    caminhoExcel = dialog.FileName;
+                    openFile.Title = "Selecionar ficheiro Excel";
 
+                    openFile.Filter =
+                        "Ficheiros Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm";
+
+                    openFile.Multiselect = false;
+
+                    if (openFile.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    // Guardar caminho do ficheiro
+                    caminhoExcel = openFile.FileName;
                     carregandoFolhas = true;
 
-                    cboFolha.Items.Clear();
-
-                    using (XLWorkbook workbook =
-                        new XLWorkbook(caminhoExcel))
+                    try
                     {
-                        // Carregar nomes de todas as folhas
-                        foreach (IXLWorksheet folha
-                            in workbook.Worksheets)
+                        cboFolha.Items.Clear();
+                        dataGridView1.DataSource = null;
+
+                        using (var workbook = new XLWorkbook(caminhoExcel))
                         {
-                            cboFolha.Items.Add(folha.Name);
+                            // foreach (IXLWorksheet worksheet in workbook.Worksheets)
+                            foreach (IXLWorksheet worksheet in workbook.Worksheets.Skip(1))
+                            {
+                                cboFolha.Items.Add(worksheet.Name);
+                            }
+                        }
+
+                        if (cboFolha.Items.Count > 0)
+                        {
+                            cboFolha.SelectedIndex = 0;
                         }
                     }
-
-                    carregandoFolhas = false;
-
-                    if (cboFolha.Items.Count > 0)
+                    finally
                     {
-                        // Selecionar automaticamente a primeira folha
-                        cboFolha.SelectedIndex = 1;
+                        carregandoFolhas = false;
                     }
-                    else
-                    {
-                        MessageBox.Show(
-                            "O ficheiro não contém folhas.",
-                            "Aviso",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    carregandoFolhas = false;
 
-                    MessageBox.Show(
-                        "Erro ao abrir o ficheiro Excel:\n" +
-                        ex.Message,
-                        "Erro",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
+                    if (cboFolha.SelectedItem != null)
+                    {
+                        CarregarDadosFolha(cboFolha.SelectedItem.ToString());
+                    }
+
+                    PSO.Dialogos.MostraAviso(
+                        "Ficheiro carregado com sucesso!\n\n" +
+                        "Ficheiro: " + Path.GetFileName(caminhoExcel) +
+                        "\nTotal de folhas: " + cboFolha.Items.Count
+                    );
                 }
+            }
+            catch (Exception ex)
+            {
+                caminhoExcel = string.Empty;
+                cboFolha.Items.Clear();
+                dataGridView1.DataSource = null;
+
+                PSO.Dialogos.MostraAviso(
+                    "Erro ao carregar ficheiro Excel: " + ex.Message
+                );
             }
         }
 
         // Navegar entre folhas
         // Ler todos os dados da folha selecionada
 
-        private void CarregarDadosFolha(string nomeFolha)
-        {
-            try
+          private void CarregarDadosFolha(string nomeFolha)
+          {
+              try
+              {
+                  DataTable tabela = new DataTable();
+
+                  using (XLWorkbook workbook =
+                      new XLWorkbook(caminhoExcel))
+                  {
+                      // Selecionar a folha pelo nome
+                      IXLWorksheet folha =
+                          workbook.Worksheet(nomeFolha);
+
+                      // Obter o intervalo utilizado
+                      IXLRange intervalo = folha.RangeUsed();
+
+                      if (intervalo == null)
+                      {
+                          dataGridView1.DataSource = null;
+
+                          MessageBox.Show(
+                              "Esta folha não contém dados.",
+                              "Aviso",
+                              MessageBoxButtons.OK,
+                              MessageBoxIcon.Information);
+
+                          return;
+                      }
+
+                      // Identificar limites do intervalo
+                      int primeiraLinha =
+                          intervalo.RangeAddress.FirstAddress.RowNumber;
+
+                      int ultimaLinha =
+                          intervalo.RangeAddress.LastAddress.RowNumber;
+
+                      int primeiraColuna =
+                          intervalo.RangeAddress.FirstAddress.ColumnNumber;
+
+                      int ultimaColuna =
+                          intervalo.RangeAddress.LastAddress.ColumnNumber;
+
+                      const int linhaCabecalho = 5;
+                      const int primeiraLinhaDados = 6;
+
+                      // Manter uma coluna para identificar a linha original do Excel.
+                      DataColumn colunaLinha = tabela.Columns.Add("Linha Excel");
+                      colunaLinha.Caption = "Linha Excel";
+
+                      // A grelha usa nomes internos únicos e mostra os cabeçalhos da linha 5.
+                      for (int coluna = primeiraColuna;
+                           coluna <= ultimaColuna;
+                           coluna++)
+                      {
+                          string cabecalho = folha.Cell(linhaCabecalho, coluna).GetFormattedString().Trim();
+                          if (string.IsNullOrWhiteSpace(cabecalho))
+                              cabecalho = "Coluna " + (coluna - primeiraColuna + 1);
+
+                          DataColumn colunaTabela = tabela.Columns.Add("Coluna_" + coluna);
+                          colunaTabela.Caption = cabecalho;
+                      }
+
+                      // Percorrer as linhas de dados abaixo do cabeçalho.
+                      for (int linha = primeiraLinhaDados;
+                           linha <= ultimaLinha;
+                           linha++)
+                      {
+                          DataRow novaLinha = tabela.NewRow();
+                          novaLinha[0] = linha.ToString();
+
+                          for (int coluna = primeiraColuna;
+                               coluna <= ultimaColuna;
+                               coluna++)
+                          {
+                              novaLinha[coluna - primeiraColuna + 1] =
+                                  folha.Cell(linha, coluna).GetFormattedString();
+                          }
+
+                          tabela.Rows.Add(novaLinha);
+                      }
+                  }
+
+                  // Apresentar dados com os cabeçalhos do Excel e permitir edição das células.
+                  dataGridView1.DataSource = null;
+                  dataGridView1.DataSource = tabela;
+                  dataGridView1.ReadOnly = false;
+                  for (int indice = 0; indice < tabela.Columns.Count; indice++)
+                  {
+                      dataGridView1.Columns[indice].HeaderText = tabela.Columns[indice].Caption;
+                      dataGridView1.Columns[indice].ReadOnly = false;
+                  }
+
+              }
+              catch (Exception ex)
+              {
+                  MessageBox.Show(
+                      "Erro ao carregar a folha:\n" +
+                      ex.Message,
+                      "Erro",
+                      MessageBoxButtons.OK,
+                      MessageBoxIcon.Error);
+              }
+          }
+
+          private void cboFolha_SelectedIndexChanged(object sender, EventArgs e)
+          {
+
+              if (carregandoFolhas)
+                  return;
+
+              if (cboFolha.SelectedItem == null)
+                  return;
+
+              string nomeFolha =
+                  cboFolha.SelectedItem.ToString();
+
+              CarregarDadosFolha(nomeFolha);
+
+          }
+
+          private void PriCustomFormDemo_Load(object sender, EventArgs e)
+          {
             {
-                DataTable tabela = new DataTable();
-
-                using (XLWorkbook workbook =
-                    new XLWorkbook(caminhoExcel))
+                string nomeFolha = "";
+                try
                 {
-                    // Selecionar a folha pelo nome
-                    IXLWorksheet folha =
-                        workbook.Worksheet(nomeFolha);
+                    DataTable tabela = new DataTable();
 
-                    // Obter o intervalo utilizado
-                    IXLRange intervalo = folha.RangeUsed();
-
-                    if (intervalo == null)
+                    using (XLWorkbook workbook =
+                        new XLWorkbook(caminhoExcel))
                     {
-                        dataGridView1.DataSource = null;
+                        // Selecionar a folha pelo nome
+                        IXLWorksheet folha =
+                            workbook.Worksheet(nomeFolha);
 
-                        MessageBox.Show(
-                            "Esta folha não contém dados.",
-                            "Aviso",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
+                        // Obter o intervalo utilizado
+                        IXLRange intervalo = folha.RangeUsed();
 
-                        return;
-                    }
+                        if (intervalo == null)
+                        {
+                            dataGridView1.DataSource = null;
 
-                    // Identificar limites do intervalo
-                    int primeiraLinha =
-                        intervalo.RangeAddress.FirstAddress.RowNumber;
+                            MessageBox.Show(
+                                "Esta folha não contém dados.",
+                                "Aviso",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
 
-                    int ultimaLinha =
-                        intervalo.RangeAddress.LastAddress.RowNumber;
+                            return;
+                        }
 
-                    int primeiraColuna =
-                        intervalo.RangeAddress.FirstAddress.ColumnNumber;
+                        // Identificar limites do intervalo
+                        int primeiraLinha =
+                            intervalo.RangeAddress.FirstAddress.RowNumber;
 
-                    int ultimaColuna =
-                        intervalo.RangeAddress.LastAddress.ColumnNumber;
+                        int ultimaLinha =
+                            intervalo.RangeAddress.LastAddress.RowNumber;
 
-                    const int linhaCabecalho = 5;
-                    const int primeiraLinhaDados = 6;
+                        int primeiraColuna =
+                            intervalo.RangeAddress.FirstAddress.ColumnNumber;
 
-                    // Manter uma coluna para identificar a linha original do Excel.
-                    DataColumn colunaLinha = tabela.Columns.Add("Linha Excel");
-                    colunaLinha.Caption = "Linha Excel";
+                        int ultimaColuna =
+                            intervalo.RangeAddress.LastAddress.ColumnNumber;
 
-                    // A grelha usa nomes internos únicos e mostra os cabeçalhos da linha 5.
-                    for (int coluna = primeiraColuna;
-                         coluna <= ultimaColuna;
-                         coluna++)
-                    {
-                        string cabecalho = folha.Cell(linhaCabecalho, coluna).GetFormattedString().Trim();
-                        if (string.IsNullOrWhiteSpace(cabecalho))
-                            cabecalho = "Coluna " + (coluna - primeiraColuna + 1);
+                        const int linhaCabecalho = 5;
+                        const int primeiraLinhaDados = 6;
 
-                        DataColumn colunaTabela = tabela.Columns.Add("Coluna_" + coluna);
-                        colunaTabela.Caption = cabecalho;
-                    }
+                        // Manter uma coluna para identificar a linha original do Excel.
+                        DataColumn colunaLinha = tabela.Columns.Add("Linha Excel");
+                        colunaLinha.Caption = "Linha Excel";
 
-                    // Percorrer as linhas de dados abaixo do cabeçalho.
-                    for (int linha = primeiraLinhaDados;
-                         linha <= ultimaLinha;
-                         linha++)
-                    {
-                        DataRow novaLinha = tabela.NewRow();
-                        novaLinha[0] = linha.ToString();
-
+                        // A grelha usa nomes internos únicos e mostra os cabeçalhos da linha 5.
                         for (int coluna = primeiraColuna;
                              coluna <= ultimaColuna;
                              coluna++)
                         {
-                            novaLinha[coluna - primeiraColuna + 1] =
-                                folha.Cell(linha, coluna).GetFormattedString();
+                            string cabecalho = folha.Cell(linhaCabecalho, coluna).GetFormattedString().Trim();
+                            if (string.IsNullOrWhiteSpace(cabecalho))
+                                cabecalho = "Coluna " + (coluna - primeiraColuna + 1);
+
+                            DataColumn colunaTabela = tabela.Columns.Add("Coluna_" + coluna);
+                            colunaTabela.Caption = cabecalho;
                         }
 
-                        tabela.Rows.Add(novaLinha);
+                        // Percorrer as linhas de dados abaixo do cabeçalho.
+                        for (int linha = primeiraLinhaDados;
+                             linha <= ultimaLinha;
+                             linha++)
+                        {
+                            DataRow novaLinha = tabela.NewRow();
+                            novaLinha[0] = linha.ToString();
+
+                            for (int coluna = primeiraColuna;
+                                 coluna <= ultimaColuna;
+                                 coluna++)
+                            {
+                                novaLinha[coluna - primeiraColuna + 1] =
+                                    folha.Cell(linha, coluna).GetFormattedString();
+                            }
+
+                            tabela.Rows.Add(novaLinha);
+                        }
                     }
-                }
 
-                // Apresentar dados com os cabeçalhos do Excel e permitir edição das células.
-                dataGridView1.DataSource = null;
-                dataGridView1.DataSource = tabela;
-                dataGridView1.ReadOnly = false;
-                for (int indice = 0; indice < tabela.Columns.Count; indice++)
+                    // Apresentar dados com os cabeçalhos do Excel e permitir edição das células.
+                    dataGridView1.DataSource = null;
+                    dataGridView1.DataSource = tabela;
+                    dataGridView1.ReadOnly = false;
+                    for (int indice = 0; indice < tabela.Columns.Count; indice++)
+                    {
+                        dataGridView1.Columns[indice].HeaderText = tabela.Columns[indice].Caption;
+                        dataGridView1.Columns[indice].ReadOnly = false;
+                    }
+
+                }
+                catch (Exception ex)
                 {
-                    dataGridView1.Columns[indice].HeaderText = tabela.Columns[indice].Caption;
-                    dataGridView1.Columns[indice].ReadOnly = false;
+                    MessageBox.Show(
+                        "Erro ao carregar a folha:\n" +
+                        ex.Message,
+                        "Erro",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
                 }
-
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    "Erro ao carregar a folha:\n" +
-                    ex.Message,
-                    "Erro",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-        }
 
-        private void cboFolha_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (carregandoFolhas)
-                return;
-
-            if (cboFolha.SelectedItem == null)
-                return;
-
-            string nomeFolha =
-                cboFolha.SelectedItem.ToString();
-
-            CarregarDadosFolha(nomeFolha);
-
-        }
-
-        private void PriCustomFormDemo_Load(object sender, EventArgs e)
-        {
-            cboFolha.Items.Add("Listen Offline");
-            cboFolha.Items.Add("Test");
-            cboFolha.Items.Add("Regulation");
-            cboFolha.Items.Add("Recieved Calls");
-            cboFolha.Items.Add("Digital");
         }
 
 
@@ -229,79 +336,103 @@ namespace ExtensibilityNduku.Form
         {
             try
             {
-                // Criar o controller
-                var controller = new
-                    ExtensibilityNduku.Controller.TDU_MovitelDesempenhoController(
-
-                        // Executar SQL
-                        sql => BSO.DSO.ExecuteSQL(sql),
-
-                        // Verificar se existem registos
-                        sql => !BSO.Consulta(sql).Vazia(),
-
-                        // Iniciar transação
-                        () => BSO.IniciaTransaccao(),
-
-                        // Confirmar transação
-                        () => BSO.TerminaTransaccao(),
-
-                        // Desfazer transação
-                        () => BSO.DesfazTransaccao()
-                    );
-
-                int total;
-
-                // MONTHLY REPORT - INSERT
-               
-
-                if (cboFolha.Text == "Monthly Report")
+                // 1. Verificar se existe ficheiro selecionado
+                if (string.IsNullOrWhiteSpace(caminhoExcel) ||
+                    !File.Exists(caminhoExcel))
                 {
-                    total = controller.Gravar(
-                        dataGridView1,
-                        Convert.ToDateTime(dtoDataUpload.Value),
-
-                        // Confirmar substituição dos registos
-                        () => PSO.Dialogos.MostraPerguntaSimples(
-                            "Já existem registos para esta data. " +
-                            "Deseja substituir os registos existentes?"
-                        )
-                    );
-
-                    if (total == 0)
-                        return;
-
                     PSO.Dialogos.MostraAviso(
-                        total + " registos gravados com sucesso!"
+                        "Primeiro, selecione um ficheiro Excel."
                     );
+                    return;
                 }
 
-                // OUTRAS FOLHAS - UPDATE
-
-                else
+                // 2. Verificar se existem folhas
+                if (cboFolha.Items.Count == 0)
                 {
-                    total = controller.Update(
-                        cboFolha.Text,
-                        dataGridView1,
-                        dtoDataUpload.Value
+                    PSO.Dialogos.MostraAviso(
+                        "Não existem folhas para processar."
+                    );
+                    return;
+                }
+
+                // 3. Obter todas as folhas do ComboBox
+                var folhas = cboFolha.Items
+                    .Cast<object>()
+                    .Select(x => x.ToString())
+                    .ToList();
+
+                // 4. Confirmar processamento
+                bool continuar =
+                    PSO.Dialogos.MostraPerguntaSimples(
+                        "Serão processadas todas as " +
+                        folhas.Count + " folhas do Excel.\n\n" +
+                        "Deseja continuar?"
                     );
 
-                    PSO.Dialogos.MostraAviso(
-                        total + " comandos de atualização executados " +
-                        "na folha " + cboFolha.Text + "."
-                    );
+                if (!continuar)
+                    return;
+
+                // 5. Criar Controller
+                var controller =
+                    new TDU_MovitelDesempenhoController();
+
+                ResultadoProcessamento resultado;
+                lblFicheiro.Text = "A iniciar processamento...";
+                this.UseWaitCursor = true;
+                btnGravar.Enabled = false;
+                btnBuscar.Enabled = false;
+                cboFolha.Enabled = false;
+                dataGridView1.Enabled = false;
+
+                try
+                {
+                    resultado = controller.ProcessarTodasFolhas(
+                        BSO,
+                        caminhoExcel,
+                        folhas,
+                        dtoDataUpload.Value,
+                        mensagem =>
+                            PSO.Dialogos.MostraPerguntaSimples(mensagem),
+                                estado =>
+                                {
+                                    lblFicheiro.Text = estado;
+                                    Application.DoEvents();
+                                });
+                        }
+                        finally
+                        {
+                            lblFicheiro.Text = Path.GetFileName(caminhoExcel);
+                            this.UseWaitCursor = false;
+                    btnGravar.Enabled = true;
+                    btnBuscar.Enabled = true;
+                    cboFolha.Enabled = true;
+                    dataGridView1.Enabled = true;
                 }
+
+                // 7. Apresentar resumo
+                string resumo =
+                    "PROCESSAMENTO CONCLUÍDO!\n\n" +
+                    "Folhas processadas: " +
+                    resultado.TotalFolhas + "\n\n" +
+                    "Registos inseridos: " +
+                    resultado.TotalInseridos + "\n" +
+                    "Registos atualizados: " +
+                    resultado.TotalAtualizados + "\n" +
+                    "Registos não encontrados: " +
+                    resultado.TotalNaoEncontrados + "\n" +
+                    "Linhas ignoradas sem chave: " +
+                    resultado.TotalLinhasIgnoradas;
+
+                PSO.Dialogos.MostraAviso(resumo);
             }
             catch (Exception ex)
             {
-                PSO.MensagensDialogos.MostraErro(
-                    "Erro ao processar os dados: " + ex.Message
+                PSO.Dialogos.MostraAviso(
+                    "Erro ao processar o ficheiro Excel:\n" +
+                    ex.Message
                 );
             }
         }
-
-        private void grbListagm_Enter(object sender, EventArgs e)
-        {
-
-        }
     }
 }
+

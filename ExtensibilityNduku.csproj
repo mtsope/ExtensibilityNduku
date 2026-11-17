@@ -216,12 +216,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controller\TDU_MovitelDesempenhoController.cs" />
+    <Compile Include="Controller\TDU_MovitelDesempenhoService.cs" />
     <Compile Include="Form\PriCustomFormDemo.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Form\PriCustomFormDemo.Designer.cs">
       <DependentUpon>PriCustomFormDemo.cs</DependentUpon>
     </Compile>
+    <Compile Include="Model\ConfiguracaoFolha.cs" />
+    <Compile Include="Model\ResultadoProcessamento.cs" />
     <Compile Include="Model\TDU_MovitelDesempenho.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

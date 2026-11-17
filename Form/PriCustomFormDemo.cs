@@ -281,7 +281,8 @@ namespace ExtensibilityNduku.Form
                 {
                     total = controller.Update(
                         cboFolha.Text,
-                        dataGridView1
+                        dataGridView1,
+                        dtoDataUpload.Value
                     );
 
                     PSO.Dialogos.MostraAviso(

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -158,13 +159,16 @@ namespace ExtensibilityNduku.Controller
 
             public int Update(
                 string nomeFolha,
-                DataGridView grid)
+                DataGridView grid, DateTime dataSelecionada)
             {
                 // Configuração das folhas
                 var configuracoes =
                     new Dictionary<string, Tuple<string, int, string,
                         List<Tuple<int, string>>>>(
                         StringComparer.OrdinalIgnoreCase);
+
+            string dataSQL = dataSelecionada.ToString("yyyyMMdd");
+
 
             // FOLHA Listen Offline
             configuracoes.Add("Listen Offline",
@@ -291,12 +295,17 @@ namespace ExtensibilityNduku.Controller
                         continue;
 
                     string chaveSegura = chave.Replace("'", "''");
+                
+                string where =
+                "CDU_ID = N'" + chaveSegura + "' " +
+                "AND CONVERT(date, CDU_Data) = " +
+                "CONVERT(date, '" + dataSQL + "', 112)";
 
-                    string sql =
-                        "UPDATE " + tabela +
-                        " SET " + string.Join(", ", valores) +
-                        " WHERE " + chaveSQL +
-                        " = N'" + chaveSegura + "'";
+                // Construir UPDATE
+                string sql =
+                    "UPDATE TDU_MovitelDesempenho " +
+                    "SET " + string.Join(", ", valores) +
+                    " WHERE " + where;
 
                     comandos.Add(sql);
                 }

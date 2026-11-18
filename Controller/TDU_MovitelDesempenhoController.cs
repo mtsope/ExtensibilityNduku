@@ -184,7 +184,6 @@ namespace ExtensibilityNduku.Controller
                         
                         }
                     });
-
                 // DIGITAL
                 configs.Add("Digital",
                     new ConfiguracaoFolha
@@ -192,20 +191,20 @@ namespace ExtensibilityNduku.Controller
                         NomeFolha = "Digital",
                         TabelaSQL = "TDU_MovitelDesempenho",
                         Operacao = TipoOperacao.Update,
-                        PrimeiraLinhaDados = 6,
-                        ColunaChaveExcel = 3,
+                        PrimeiraLinhaDados = 12,
+                        ColunaChaveExcel = 9,
                         ColunaChaveSQL = "CDU_ID",
                         ColunaDataSQL = "CDU_Data",
                         Colunas = new List<MapeamentoColuna>
                         {
                               new MapeamentoColuna
                         {
-                            ColunaExcel = 4,
+                            ColunaExcel = 10,
                             ColunaSQL = "CDU_DigiChat"
                         },
                         new MapeamentoColuna
                         {
-                            ColunaExcel = 5,
+                            ColunaExcel = 11,
                             ColunaSQL = "CDU_DigiTicket"
                         }
                         }
@@ -572,6 +571,8 @@ namespace ExtensibilityNduku.Controller
                                             coluna.ColunaSQL + " = " +
                                             SqlValor(registo[coluna.ColunaSQL]));
                                     }
+
+                                    
 
                                     string sqlUpdate =
                                         "UPDATE " + config.TabelaSQL +

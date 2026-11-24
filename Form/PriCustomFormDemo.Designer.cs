@@ -74,12 +74,13 @@
             // cboFolha
             // 
             this.cboFolha.Dock = System.Windows.Forms.DockStyle.Right;
+            this.cboFolha.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cboFolha.FormattingEnabled = true;
             this.cboFolha.Location = new System.Drawing.Point(330, 16);
             this.cboFolha.Name = "cboFolha";
             this.cboFolha.Size = new System.Drawing.Size(155, 21);
             this.cboFolha.TabIndex = 2;
-            this.cboFolha.SelectedIndexChanged += new System.EventHandler(this.cboFolha_SelectedIndexChanged_1);
+            this.cboFolha.SelectedIndexChanged += new System.EventHandler(this.cboFolha_SelectedIndexChanged);
             // 
             // btnGravar
             // 

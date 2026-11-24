@@ -435,10 +435,6 @@ namespace ExtensibilityNduku.Form
             }
         }
 
-        private void cboFolha_SelectedIndexChanged_1(object sender, EventArgs e)
-        {
-
-        }
     }
 }
 

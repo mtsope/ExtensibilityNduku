@@ -2,6 +2,7 @@
 using ExtensibilityNduku.Model;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -236,6 +237,34 @@ namespace ExtensibilityNduku.Controller
                 return "'" + (valor ?? "").Replace("'", "''") + "'";
             }
 
+            private string ValorExcel(IXLCell celula)
+            {
+                if (celula.DataType == XLDataType.Number)
+                {
+                    return celula.GetDouble().ToString(
+                        CultureInfo.InvariantCulture);
+                }
+
+                string valor = celula.GetFormattedString().Trim();
+                decimal numero;
+                NumberStyles estilos = NumberStyles.AllowLeadingSign |
+                    NumberStyles.AllowDecimalPoint |
+                    NumberStyles.AllowExponent |
+                    NumberStyles.AllowLeadingWhite |
+                    NumberStyles.AllowTrailingWhite;
+
+                if (decimal.TryParse(
+                    valor,
+                    estilos,
+                    CultureInfo.CurrentCulture,
+                    out numero))
+                {
+                    return numero.ToString(CultureInfo.InvariantCulture);
+                }
+
+                return valor;
+            }
+
 
         // =====================================================
         // 4. PROCESSAR TODAS AS FOLHAS
@@ -370,9 +399,8 @@ namespace ExtensibilityNduku.Controller
 
                         foreach (var coluna in config.Colunas)
                         {
-                            string valor = worksheet
-                                .Cell(i, coluna.ColunaExcel)
-                                .GetFormattedString().Trim();
+                            string valor = ValorExcel(
+                                worksheet.Cell(i, coluna.ColunaExcel));
 
                             valores[coluna.ColunaSQL] = valor;
                             linhaComDados = linhaComDados ||

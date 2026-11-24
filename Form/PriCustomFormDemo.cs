@@ -23,6 +23,7 @@ namespace ExtensibilityNduku.Form
         public PriCustomFormDemo()
         {
             InitializeComponent();
+
         }
 
         // Guardar o caminho do ficheiro selecionado
@@ -432,6 +433,11 @@ namespace ExtensibilityNduku.Form
                     ex.Message
                 );
             }
+        }
+
+        private void cboFolha_SelectedIndexChanged_1(object sender, EventArgs e)
+        {
+
         }
     }
 }

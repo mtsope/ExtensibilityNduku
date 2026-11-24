@@ -29,18 +29,18 @@
         private void InitializeComponent()
         {
             this.grbData = new System.Windows.Forms.GroupBox();
-            this.btnGravar = new System.Windows.Forms.Button();
-            this.lblFicheiro = new System.Windows.Forms.Label();
-            this.dtoDataUpload = new System.Windows.Forms.DateTimePicker();
-            this.btnBuscar = new System.Windows.Forms.Button();
-            this.grbListagm = new System.Windows.Forms.GroupBox();
-            this.dataGridView1 = new System.Windows.Forms.DataGridView();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.cboFolha = new System.Windows.Forms.ComboBox();
+            this.btnGravar = new System.Windows.Forms.Button();
+            this.btnBuscar = new System.Windows.Forms.Button();
+            this.lblFicheiro = new System.Windows.Forms.Label();
+            this.dtoDataUpload = new System.Windows.Forms.DateTimePicker();
+            this.grbListagm = new System.Windows.Forms.GroupBox();
+            this.dataGridView1 = new System.Windows.Forms.DataGridView();
             this.grbData.SuspendLayout();
+            this.groupBox1.SuspendLayout();
             this.grbListagm.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
-            this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
             // grbData
@@ -58,6 +58,29 @@
             this.grbData.TabStop = false;
             this.grbData.Text = "Data";
             // 
+            // groupBox1
+            // 
+            this.groupBox1.BackColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.groupBox1.Controls.Add(this.cboFolha);
+            this.groupBox1.Controls.Add(this.btnGravar);
+            this.groupBox1.Controls.Add(this.btnBuscar);
+            this.groupBox1.Dock = System.Windows.Forms.DockStyle.Right;
+            this.groupBox1.Location = new System.Drawing.Point(309, 16);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(488, 56);
+            this.groupBox1.TabIndex = 2;
+            this.groupBox1.TabStop = false;
+            // 
+            // cboFolha
+            // 
+            this.cboFolha.Dock = System.Windows.Forms.DockStyle.Right;
+            this.cboFolha.FormattingEnabled = true;
+            this.cboFolha.Location = new System.Drawing.Point(330, 16);
+            this.cboFolha.Name = "cboFolha";
+            this.cboFolha.Size = new System.Drawing.Size(155, 21);
+            this.cboFolha.TabIndex = 2;
+            this.cboFolha.SelectedIndexChanged += new System.EventHandler(this.cboFolha_SelectedIndexChanged_1);
+            // 
             // btnGravar
             // 
             this.btnGravar.Location = new System.Drawing.Point(155, 16);
@@ -67,6 +90,17 @@
             this.btnGravar.Text = "Gravar";
             this.btnGravar.UseVisualStyleBackColor = true;
             this.btnGravar.Click += new System.EventHandler(this.btnGravar_Click);
+            // 
+            // btnBuscar
+            // 
+            this.btnBuscar.Dock = System.Windows.Forms.DockStyle.Left;
+            this.btnBuscar.Location = new System.Drawing.Point(3, 16);
+            this.btnBuscar.Name = "btnBuscar";
+            this.btnBuscar.Size = new System.Drawing.Size(128, 37);
+            this.btnBuscar.TabIndex = 0;
+            this.btnBuscar.Text = "Buscar";
+            this.btnBuscar.UseVisualStyleBackColor = true;
+            this.btnBuscar.Click += new System.EventHandler(this.btnBuscar_Click);
             // 
             // lblFicheiro
             // 
@@ -82,17 +116,6 @@
             this.dtoDataUpload.Name = "dtoDataUpload";
             this.dtoDataUpload.Size = new System.Drawing.Size(205, 20);
             this.dtoDataUpload.TabIndex = 1;
-            // 
-            // btnBuscar
-            // 
-            this.btnBuscar.Dock = System.Windows.Forms.DockStyle.Left;
-            this.btnBuscar.Location = new System.Drawing.Point(3, 16);
-            this.btnBuscar.Name = "btnBuscar";
-            this.btnBuscar.Size = new System.Drawing.Size(128, 37);
-            this.btnBuscar.TabIndex = 0;
-            this.btnBuscar.Text = "Buscar";
-            this.btnBuscar.UseVisualStyleBackColor = true;
-            this.btnBuscar.Click += new System.EventHandler(this.btnBuscar_Click);
             // 
             // grbListagm
             // 
@@ -117,28 +140,6 @@
             this.dataGridView1.Size = new System.Drawing.Size(794, 356);
             this.dataGridView1.TabIndex = 2;
             // 
-            // groupBox1
-            // 
-            this.groupBox1.BackColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.groupBox1.Controls.Add(this.cboFolha);
-            this.groupBox1.Controls.Add(this.btnGravar);
-            this.groupBox1.Controls.Add(this.btnBuscar);
-            this.groupBox1.Dock = System.Windows.Forms.DockStyle.Right;
-            this.groupBox1.Location = new System.Drawing.Point(309, 16);
-            this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(488, 56);
-            this.groupBox1.TabIndex = 2;
-            this.groupBox1.TabStop = false;
-            // 
-            // cboFolha
-            // 
-            this.cboFolha.Dock = System.Windows.Forms.DockStyle.Right;
-            this.cboFolha.FormattingEnabled = true;
-            this.cboFolha.Location = new System.Drawing.Point(330, 16);
-            this.cboFolha.Name = "cboFolha";
-            this.cboFolha.Size = new System.Drawing.Size(155, 21);
-            this.cboFolha.TabIndex = 2;
-            // 
             // PriCustomFormDemo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -151,9 +152,9 @@
             this.Text = "TDU_MovitelDesempenho";
             this.grbData.ResumeLayout(false);
             this.grbData.PerformLayout();
+            this.groupBox1.ResumeLayout(false);
             this.grbListagm.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).EndInit();
-            this.groupBox1.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 

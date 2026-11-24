@@ -572,8 +572,6 @@ namespace ExtensibilityNduku.Controller
                                             SqlValor(registo[coluna.ColunaSQL]));
                                     }
 
-                                    
-
                                     string sqlUpdate =
                                         "UPDATE " + config.TabelaSQL +
                                         " SET " +
